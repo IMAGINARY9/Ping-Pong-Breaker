@@ -9,6 +9,9 @@
 
 (define PIXEL 16)
 
+; (define solid-color  (new brush% [color "colorname"]))
+; (define default (new brush% [color "white"][style 'opaque]))
+
 ;;  ---------- DEFINITIONS END ----------
 
 ;;  ---------- TOOLS ----------
@@ -167,9 +170,6 @@
       )
 )
 
-(define solid-red  (new brush% [color "red"]))
-(define default (new brush% [color "white"][style 'opaque]))
-
 (define (draw-ball-points b n dc)
   (unless (false? b)
     (let* ([angl (/ 360 n)]
@@ -179,18 +179,19 @@
       ; (displayln (obj-position b))
       ; (displayln `("r:", r))
       ; (displayln `("center:", center))
-        (send dc set-brush solid-red)
+
+        ;(send dc set-brush solid-red)
 
         (for ([p (in-range n)])
-          (let* ([x (+ (posn-x center)(* r (cos (degrees->radians (* p angl)))))]
-                  [y (+ (posn-y center)(* r (sin (degrees->radians (* p angl)))))])
+          (let* ( [x (+ (posn-x center)(* r (cos (degrees->radians (+ (* p angl) 90)))))]
+                  [y (+ (posn-y center)(* r (sin (degrees->radians (+ (* p angl) 90)))))])
 
           ;(displayln `("out", p, x, y ))
-          (send dc draw-ellipse x y 2 2)
+          (send dc draw-point x y)
           )
         )
 
-        (send dc set-brush default)
+        ;(send dc set-brush default)
     )
   )
 )
@@ -203,27 +204,21 @@
 
         (for ([p (in-range n)])
         (let ([point (posn
-                (+ (posn-x center)(* r (cos (degrees->radians (* p angl)))))
-                (+ (posn-y center)(* r (sin (degrees->radians (* p angl))))))
+                (+ (posn-x center)(* r (cos (degrees->radians (+ (* p angl) 90)))))
+                (+ (posn-y center)(* r (sin (degrees->radians (+ (* p angl) 90))))))
               ])
 
         ; (displayln point)
         ; (displayln (obj-position obj1))
         (when (check-hover point obj1)
-        (let ([norm-posn (posn-normalize (posn-substract point center))])
-        
-          (displayln 
-            (posn-substract (ball-direction b)
-              (posn-mult-val (posn-mult 
-                (posn-mult (ball-direction b) norm-posn) norm-posn) 2) )
-          )
+          (let ([norm-posn (posn-normalize (posn-substract point center))])
           
-          (change-ball-direction b 
-            (posn-substract (ball-direction b)
-              (posn-mult-val (posn-mult 
-                (posn-mult (ball-direction b) norm-posn) norm-posn) 2) )
+            (change-ball-direction b 
+              (posn-normalize(posn-substract (ball-direction b)
+                (posn-mult-val (posn-mult 
+                  (posn-mult (ball-direction b) norm-posn) norm-posn) 2) ))
+            )
           )
-        )
         )
         
         )
@@ -233,34 +228,33 @@
   #f
 )
 
-
-(define (check-collision obj1 obj2)
-  (let* ([l-obj1-pos (posn 
-            (posn-x (obj-position obj1))
-            (+ (posn-y (obj-position obj1)) (/ (posn-y (obj-size obj1)) 2)))]
-          [u-obj1-pos (posn 
-            (+ (posn-x (obj-position obj1)) (/ (posn-x (obj-size obj1)) 2))
-            (posn-y (obj-position obj1)))]
-          [r-obj1-pos (posn 
-            (+ (posn-x (obj-position obj1)) (posn-x (obj-size obj1)))
-            (+ (posn-y (obj-position obj1)) (/ (posn-y (obj-size obj1)) 2)))]
-          [d-obj1-pos (posn 
-            (+ (posn-x (obj-position obj1)) (/ (posn-x (obj-size obj1)) 2))
-            (+ (posn-y (obj-position obj1)) (posn-y (obj-size obj1))))]
-        )
-  (cond
-    [(check-hover l-obj1-pos obj2) (displayln "left")
-    (change-ball-direction obj1 (posn -1 1)) #true]
-    [(check-hover u-obj1-pos obj2) (displayln "up")
-    (change-ball-direction obj1 (posn 1 -1)) #true]
-    [(check-hover r-obj1-pos obj2) (displayln "right")
-    (change-ball-direction obj1 (posn -1 1)) #true]
-    [(check-hover d-obj1-pos obj2) (displayln "down")
-    (change-ball-direction obj1 (posn 1 -1)) #true]
-    [else #false]
-  )
-  )
-)
+; (define (check-collision obj1 obj2)
+;   (let* ([l-obj1-pos (posn 
+;             (posn-x (obj-position obj1))
+;             (+ (posn-y (obj-position obj1)) (/ (posn-y (obj-size obj1)) 2)))]
+;           [u-obj1-pos (posn 
+;             (+ (posn-x (obj-position obj1)) (/ (posn-x (obj-size obj1)) 2))
+;             (posn-y (obj-position obj1)))]
+;           [r-obj1-pos (posn 
+;             (+ (posn-x (obj-position obj1)) (posn-x (obj-size obj1)))
+;             (+ (posn-y (obj-position obj1)) (/ (posn-y (obj-size obj1)) 2)))]
+;           [d-obj1-pos (posn 
+;             (+ (posn-x (obj-position obj1)) (/ (posn-x (obj-size obj1)) 2))
+;             (+ (posn-y (obj-position obj1)) (posn-y (obj-size obj1))))]
+;         )
+;   (cond
+;     [(check-hover l-obj1-pos obj2) (displayln "left")
+;     (change-ball-direction obj1 (posn -1 1)) #true]
+;     [(check-hover u-obj1-pos obj2) (displayln "up")
+;     (change-ball-direction obj1 (posn 1 -1)) #true]
+;     [(check-hover r-obj1-pos obj2) (displayln "right")
+;     (change-ball-direction obj1 (posn -1 1)) #true]
+;     [(check-hover d-obj1-pos obj2) (displayln "down")
+;     (change-ball-direction obj1 (posn 1 -1)) #true]
+;     [else #false]
+;   )
+;   )
+; )
 
 (define (check-collision-sub-element b)
   (local [(define (check-col-deep b where)
@@ -279,9 +273,11 @@
 )
 
 (define (check-ball-direction b)
-  (displayln `("player-col:",(check-collision b (get-element "player"))))
+  ;(displayln `("player-col:",(check-collision b (get-element "player"))))
   ; if (#t and is block) block-hp--
-  (displayln (check-collision-sub-element b))
+  ;(displayln (check-collision-sub-element b))
+  (check-ball-points b (get-element "player") 1)
+  (check-collision-sub-element b)
   ; return
   (ball-direction (get-element "ball"))
 )
@@ -330,7 +326,9 @@
 (define (rand-vect2) (posn (rand-pos-x) (rand-pos-y)))
 
 (define *blocks (list 
-  (block "block" (posn 288 288) 
+  (block "block" (posn 288 272) 
+    (posn PIXEL PIXEL) "rect" 1) 
+  (block "block" (posn 272 288) 
     (posn PIXEL PIXEL) "rect" 1) 
   (block "block" (rand-vect2) 
     (posn PIXEL PIXEL) "rect" 1) 
@@ -361,12 +359,14 @@
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
                 
-      (send dc draw-ellipse
-        (posn-x pos)
-        (posn-y pos)
-        (posn-x sz)
-        (posn-y sz))
-))
+      ; (send dc draw-ellipse
+      ;   (posn-x pos)
+      ;   (posn-y pos)
+      ;   (posn-x sz)
+      ;   (posn-y sz))
+        #f
+    ) 
+)
 
 (define (draw-form dc e)
   (cond
