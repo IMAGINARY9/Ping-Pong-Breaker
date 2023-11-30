@@ -9,6 +9,9 @@
 
 (define PIXEL 16)
 
+;(define FRAME-RATE 17)
+(define FRAME-RATE 1)
+
 ; (define solid-color  (new brush% [color "colorname"]))
 ; (define default (new brush% [color "white"][style 'opaque]))
 
@@ -18,27 +21,34 @@
 
 (struct posn (x y) #:transparent)
 
-(define (posn-add posn1 posn2)
-  (posn (+ (posn-x posn1) (posn-x posn2)) 
-        (+ (posn-y posn1) (posn-y posn2))
-))
-
+(define/match (posn-add posn1 posn2)
+  [((posn x1 y1) (posn x2 y2))
+    (posn (+ x1 x2) (+ y1 y2))]
+)
+(define (posn-sum posn1 . other)
+  (foldl posn-add posn1 other)
+)
+(define (posn-sum-lst posn-lst)
+  (foldl posn-add (posn 0 0) posn-lst)
+)
 (define (posn-add-val posn1 val)
   (posn (+ (posn-x posn1) val) 
         (+ (posn-y posn1) val)
 ))
 
-(define (posn-substract posn1 posn2)
-  (posn (- (posn-x posn1) (posn-x posn2)) 
-        (- (posn-y posn1) (posn-y posn2))
-))
+(define/match (posn-substract posn1 posn2)
+  [((posn x1 y1) (posn x2 y2))
+    (posn (- x1 x2) (- y1 y2))]
+)
 
-(define (posn-mult posn1 posn2)
-  (posn (* (posn-x posn1) (posn-x posn2)) 
-        (* (posn-y posn1) (posn-y posn2))
-))
-
-(define (posn-mult-val posn1 val)
+(define/match (posn-multiply posn1 posn2)
+  [((posn x1 y1) (posn x2 y2))
+    (posn (* x1 x2) (* y1 y2))]
+)
+(define (posn-product posn1 . other)
+  (foldl posn-multiply posn1 other)
+)
+(define (posn-multiply-val posn1 val)
   (posn (* (posn-x posn1) val) 
         (* (posn-y posn1) val)
 ))
@@ -53,6 +63,19 @@
 )
 
 (struct obj (id position size) #:transparent)
+
+;(struct obj-lst (id lst) #:transparent)
+
+(define (check-hover p obj)
+  (and 
+    (>= (posn-x p) (posn-x (obj-position obj))) 
+      (<= (posn-x p) (+ (posn-x (obj-position obj))
+         (posn-x (obj-size obj))))
+    (>= (posn-y p)(posn-y (obj-position obj))) 
+      (<= (posn-y p) (+ (posn-y (obj-position obj))
+         (posn-y (obj-size obj))))
+  )
+)
 
 ;;  ---------- TOOLS END ----------
 
@@ -81,22 +104,17 @@
 )
 )
 
-(define (check-hover p obj)
-  (and 
-    (>= (posn-x p) (posn-x (obj-position obj))) 
-      (<= (posn-x p) (+ (posn-x (obj-position obj))
-         (posn-x (obj-size obj))))
-    (>= (posn-y p)(posn-y (obj-position obj))) 
-      (<= (posn-y p) (+ (posn-y (obj-position obj))
-         (posn-y (obj-size obj))))
-  )
-)
-
 (define (handle-button button-id)
   (cond
-  [(eq? button-id "play-btn") (set-state game-state)]
+  [(eq? button-id "play-btn") 
+    (set-state game-state)
+    (send canvas play-game)
+  ]
+  [(eq? button-id "exit-game-btn") 
+    (set-state menu-state)
+    (send canvas quit-game)
+  ]
   [(eq? button-id "exit-app-btn") (send f show #f)]
-  [(eq? button-id "exit-game-btn") (set-state menu-state)]
   [else (display button-id)]
   )
 )
@@ -108,11 +126,6 @@
 ;;  ---------- BUTTONS END ----------
 
 ;;  ---------- ENTITIES ----------
-
-; (struct player (position size))
-; (struct ball (position size direction))
-; (struct wall (position size))
-; (struct block (position size hp))
 
 (struct entity obj (form))
 
@@ -155,139 +168,95 @@
   (posn PIXEL PIXEL)
   "circle" (posn-normalize (posn 1 1))))
 
-; (define (change-ball-direction b new-dir)
-;   (set-element 
-;         (struct-copy ball b
-;           [direction (posn-mult 
-;               (ball-direction b) new-dir)])
-;       )
-; )
-
 (define (change-ball-direction b new-dir)
   (set-element 
         (struct-copy ball b
-          [direction new-dir])
+          [direction (posn-normalize new-dir)])
       )
 )
 
-(define (draw-ball-points b n dc)
-  (unless (false? b)
-    (let* ([angl (/ 360 n)]
-            [r (/ (posn-x (obj-size b)) 2)]
-            [center (posn-add-val (obj-position b) r)])
 
-      ; (displayln (obj-position b))
-      ; (displayln `("r:", r))
-      ; (displayln `("center:", center))
-
-        ;(send dc set-brush solid-red)
-
-        (for ([p (in-range n)])
-          (let* ( [x (+ (posn-x center)(* r (cos (degrees->radians (+ (* p angl) 90)))))]
-                  [y (+ (posn-y center)(* r (sin (degrees->radians (+ (* p angl) 90)))))])
-
-          ;(displayln `("out", p, x, y ))
-          (send dc draw-point x y)
-          )
-        )
-
-        ;(send dc set-brush default)
-    )
-  )
-)
-
-(define (check-ball-points b obj1 n)
-  (unless (false? b)
-    (let* ([angl (/ 360 n)]
-            [r (/ (posn-x (obj-size b)) 2)]
-            [center (posn-add-val (obj-position b) r)])
-
-        (for ([p (in-range n)])
-        (let ([point (posn
-                (+ (posn-x center)(* r (cos (degrees->radians (+ (* p angl) 90)))))
-                (+ (posn-y center)(* r (sin (degrees->radians (+ (* p angl) 90))))))
-              ])
-
-        ; (displayln point)
-        ; (displayln (obj-position obj1))
-        (when (check-hover point obj1)
-          (let ([norm-posn (posn-normalize (posn-substract point center))])
-          
-            (change-ball-direction b 
-              (posn-normalize(posn-substract (ball-direction b)
-                (posn-mult-val (posn-mult 
-                  (posn-mult (ball-direction b) norm-posn) norm-posn) 2) ))
+(define (calc-new-direction current-dir norm-dir)
+  (posn-substract current-dir
+              (posn-multiply-val (posn-product 
+                current-dir norm-dir norm-dir) 2)
             )
-          )
-        )
-        
-        )
-        )
-    )
-  )
-  #f
 )
-
-; (define (check-collision obj1 obj2)
-;   (let* ([l-obj1-pos (posn 
-;             (posn-x (obj-position obj1))
-;             (+ (posn-y (obj-position obj1)) (/ (posn-y (obj-size obj1)) 2)))]
-;           [u-obj1-pos (posn 
-;             (+ (posn-x (obj-position obj1)) (/ (posn-x (obj-size obj1)) 2))
-;             (posn-y (obj-position obj1)))]
-;           [r-obj1-pos (posn 
-;             (+ (posn-x (obj-position obj1)) (posn-x (obj-size obj1)))
-;             (+ (posn-y (obj-position obj1)) (/ (posn-y (obj-size obj1)) 2)))]
-;           [d-obj1-pos (posn 
-;             (+ (posn-x (obj-position obj1)) (/ (posn-x (obj-size obj1)) 2))
-;             (+ (posn-y (obj-position obj1)) (posn-y (obj-size obj1))))]
-;         )
-;   (cond
-;     [(check-hover l-obj1-pos obj2) (displayln "left")
-;     (change-ball-direction obj1 (posn -1 1)) #true]
-;     [(check-hover u-obj1-pos obj2) (displayln "up")
-;     (change-ball-direction obj1 (posn 1 -1)) #true]
-;     [(check-hover r-obj1-pos obj2) (displayln "right")
-;     (change-ball-direction obj1 (posn -1 1)) #true]
-;     [(check-hover d-obj1-pos obj2) (displayln "down")
-;     (change-ball-direction obj1 (posn 1 -1)) #true]
-;     [else #false]
-;   )
-;   )
-; )
-
-(define (check-collision-sub-element b)
-  (local [(define (check-col-deep b where)
-            (when (not (false? where))
-              (findf (lambda (el) 
-                  ;(check-collision b el))
-                  (check-ball-points b el 8))
-                where)
-          ))]
-    (check-col-deep b
-      (findf (lambda (lst)
-        (not (false? (check-col-deep b lst))))
-        (get-lists (get-elements)))
-    )
+(define (get-ball-point n angl r c)
+  (posn
+    (+ (posn-x c)(* r (cos (degrees->radians (+ (* n angl) 90)))))
+    (+ (posn-y c)(* r (sin (degrees->radians (+ (* n angl) 90)))))
   )
 )
 
-(define (check-ball-direction b)
-  ;(displayln `("player-col:",(check-collision b (get-element "player"))))
+(define (get-ball-points n angl radius center)
+  (cond
+    [(<= n 0) '()]
+    [
+      (cons (get-ball-point n angl radius center) 
+      (get-ball-points (- n 1) angl radius center))
+    ]
+  )
+)
+
+(define (check-point-col p obj-lst)
+  (cond
+    [(empty? obj-lst) '()]
+    [(check-hover p (first obj-lst))
+      (cons p (check-point-col p (rest obj-lst)))
+    ]
+    [else (check-point-col p (rest obj-lst))]
+  )
+)
+(define (check-points-cols p-lst obj-lst)
+  (cond
+    [(empty? p-lst) (posn 0 0)]
+    [else (posn-sum 
+      (posn-sum-lst (check-point-col (first p-lst) obj-lst))
+      (check-points-cols (rest p-lst) obj-lst))]
+  )
+)
+
+
+(define (check-ball-points b obj-lst n dc)
+  (unless (false? b)
+    (let* ([angl (/ 360 n)]
+            [radius (/ (posn-x (obj-size b)) 2)]
+            [center (posn-add-val (obj-position b) radius)]
+            [points (get-ball-points n angl radius center)])
+
+      (let ([res (check-points-cols points obj-lst)])
+
+      (unless (equal? res (posn 0 0)) 
+      
+      (change-ball-direction b
+        (calc-new-direction (ball-direction b) (posn-normalize 
+          (posn-substract res center))
+        )
+      )
+      ))
+    )
+   )
+)
+
+
+(define (check-ball-direction b dc)
+
   ; if (#t and is block) block-hp--
-  ;(displayln (check-collision-sub-element b))
-  (check-ball-points b (get-element "player") 1)
-  (check-collision-sub-element b)
+  ; teleport if center is hover
+  (check-ball-points b (cons (get-element "player") '()) 1 dc) 
+  (check-ball-points b (get-element-lst "block") 16 dc)
+  (check-ball-points b (get-element-lst "wall") 4 dc)
+
+  ; change dir
   ; return
   (ball-direction (get-element "ball"))
 )
 
-  (define (move-ball)
+  (define (move-ball dc)
     (let ([b (get-element "ball")])  
 
-    ; (displayln (check-ball-direction b))
-
-    (let* ([new-dir (check-ball-direction b)]
+    (let* ([new-dir (check-ball-direction b dc)]
             [new-pos (posn-add (obj-position b)
                           new-dir)])
 
@@ -326,9 +295,9 @@
 (define (rand-vect2) (posn (rand-pos-x) (rand-pos-y)))
 
 (define *blocks (list 
-  (block "block" (posn 288 272) 
+  (block "block" (posn 320 272) 
     (posn PIXEL PIXEL) "rect" 1) 
-  (block "block" (posn 272 288) 
+  (block "block" (posn 304 288) 
     (posn PIXEL PIXEL) "rect" 1) 
   (block "block" (rand-vect2) 
     (posn PIXEL PIXEL) "rect" 1) 
@@ -359,12 +328,11 @@
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
                 
-      ; (send dc draw-ellipse
-      ;   (posn-x pos)
-      ;   (posn-y pos)
-      ;   (posn-x sz)
-      ;   (posn-y sz))
-        #f
+      (send dc draw-ellipse
+        (posn-x pos)
+        (posn-y pos)
+        (posn-x sz)
+        (posn-y sz))
     ) 
 )
 
@@ -429,6 +397,12 @@
      (get-elements)
 ))
 
+(define (get-element-lst id) (findf 
+  (lambda (el) (and (list? el) (not (empty? el))
+         (equal? (obj-id (first el)) id)))
+     (get-elements)
+))
+
 (define (get-lists main)
   (filter (lambda (lst)
     (and (not (null? lst))(list? lst))) 
@@ -473,19 +447,25 @@
   (class canvas%
     (inherit get-dc)
 
-    ; (define frame-rate 17)
-    ; (define (tick)
-    ;     (set! duration (- duration 1))
-    ;     (displayln duration)
-    ;     (when (= duration 0)
-    ;         (send game-timer stop))
-    ;         (send game-timer start frame-rate))
-    ; )
+    (define (tick)
+      (move-ball (get-dc))
+      (paint-callback this 'y)
+    )
 
-    ; (define game-timer
-    ;     (new timer%
-    ;         [notify-callback tick] [interval #f])
-    ; )
+    (define game-timer
+      (new timer%
+           [notify-callback tick] [interval #f])
+    )
+
+    (define/public (play-game)
+      (send game-timer start FRAME-RATE)
+    )
+
+    (define/public (quit-game)
+      (send game-timer stop)
+    )
+
+
 
     ; Overridden on-char function for checking custom keystrokes on the keyboard 
     (define/override (on-char key-event)
@@ -508,7 +488,7 @@
             ]
             [(or (equal? key 'down)
                 (equal? key #\s ))
-                    (move-ball)
+                    (move-ball (get-dc))
                     ;(displayln "move-right")
             ]
             [else (println key)]
@@ -567,8 +547,6 @@
       (for ([btn (in-list (get-buttons))])
           (draw-button dc btn)
       )
-
-      (draw-ball-points (get-element "ball") 8 dc)
 
       )
 
