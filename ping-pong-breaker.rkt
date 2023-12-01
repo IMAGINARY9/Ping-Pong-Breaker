@@ -9,8 +9,9 @@
 
 (define PIXEL 16)
 
-;(define FRAME-RATE 17)
-(define FRAME-RATE 1)
+;(define FRAME-RATE 17) ;60fps
+;(define FRAME-RATE 8) ;120fps
+(define FRAME-RATE 4) ;240fps
 
 ; (define solid-color  (new brush% [color "colorname"]))
 ; (define default (new brush% [color "white"][style 'opaque]))
@@ -62,9 +63,13 @@
   )
 )
 
-(struct obj (id position size) #:transparent)
+(define (rand-pos-x) (* (random PIXEL (/ WIDTH PIXEL)) PIXEL))
+(define (rand-pos-y) (* (random PIXEL (/ HEIGHT PIXEL)) PIXEL))
+(define (rand-posn) (posn (rand-pos-x) (rand-pos-y)))
 
-;(struct obj-lst (id lst) #:transparent)
+(struct item (id) #:transparent)
+(struct obj item (position size) #:transparent)
+(struct obj-list item (lst) #:transparent)
 
 (define (check-hover p obj)
   (and 
@@ -175,7 +180,6 @@
       )
 )
 
-
 (define (calc-new-direction current-dir norm-dir)
   (posn-substract current-dir
               (posn-multiply-val (posn-product 
@@ -192,8 +196,7 @@
 (define (get-ball-points n angl radius center)
   (cond
     [(<= n 0) '()]
-    [
-      (cons (get-ball-point n angl radius center) 
+    [(cons (get-ball-point n angl radius center) 
       (get-ball-points (- n 1) angl radius center))
     ]
   )
@@ -203,6 +206,8 @@
   (cond
     [(empty? obj-lst) '()]
     [(check-hover p (first obj-lst))
+      (when (block? (first obj-lst))
+        (block-collide (first obj-lst)))
       (cons p (check-point-col p (rest obj-lst)))
     ]
     [else (check-point-col p (rest obj-lst))]
@@ -223,30 +228,33 @@
     (let* ([angl (/ 360 n)]
             [radius (/ (posn-x (obj-size b)) 2)]
             [center (posn-add-val (obj-position b) radius)]
-            [points (get-ball-points n angl radius center)])
+            [points (get-ball-points n angl radius center)]
+            [res (check-points-cols points obj-lst)])
 
-      (let ([res (check-points-cols points obj-lst)])
+      ; (for ([p (in-list points)])
+      ;   (send dc draw-ellipse
+      ;     (posn-x p) (posn-y p) 2 2
+      ;   )
+      ; )
 
       (unless (equal? res (posn 0 0)) 
-      
-      (change-ball-direction b
-        (calc-new-direction (ball-direction b) (posn-normalize 
-          (posn-substract res center))
+        (change-ball-direction b
+          (calc-new-direction (ball-direction b) 
+            (posn-normalize (posn-substract res center)))
         )
       )
-      ))
+
     )
    )
 )
-
 
 (define (check-ball-direction b dc)
 
   ; if (#t and is block) block-hp--
   ; teleport if center is hover
   (check-ball-points b (cons (get-element "player") '()) 1 dc) 
-  (check-ball-points b (get-element-lst "block") 16 dc)
-  (check-ball-points b (get-element-lst "wall") 4 dc)
+  (check-ball-points b (obj-list-lst (get-element "blocks")) 16 dc)
+  (check-ball-points b (obj-list-lst (get-element "walls")) 4 dc)
 
   ; change dir
   ; return
@@ -273,16 +281,17 @@
 
 ;;  ---------- WALLS ----------
 
-(define *walls (list 
-  (entity "wall" (posn 0 0) (posn PIXEL HEIGHT)
+(define *walls (obj-list "walls" (list 
+  (entity "wall0" (posn 0 0) (posn PIXEL HEIGHT)
     "rect") 
-  (entity "wall" (posn (- WIDTH PIXEL) 0) (posn PIXEL HEIGHT) 
+  (entity "wall1" (posn (- WIDTH PIXEL) 0) (posn PIXEL HEIGHT) 
     "rect")
-  (entity "wall" (posn 0 0) (posn WIDTH PIXEL) 
+  (entity "wall2" (posn 0 0) (posn WIDTH PIXEL) 
     "rect")
-  (entity "wall" (posn 0 (- HEIGHT PIXEL PIXEL)) (posn WIDTH PIXEL) 
-    "rect"))
-)
+  (entity "wall3" (posn 0 (- HEIGHT PIXEL PIXEL)) (posn WIDTH PIXEL) 
+    "rect")
+    )
+))
 
 ;;  ---------- WALLS END ----------
 
@@ -290,26 +299,45 @@
 
 (struct block entity (hp))
 
-(define (rand-pos-x) (* (random 0 (/ WIDTH PIXEL)) PIXEL))
-(define (rand-pos-y) (* (random 0 (/ HEIGHT PIXEL)) PIXEL))
-(define (rand-vect2) (posn (rand-pos-x) (rand-pos-y)))
-
-(define *blocks (list 
-  (block "block" (posn 320 272) 
-    (posn PIXEL PIXEL) "rect" 1) 
-  (block "block" (posn 304 288) 
-    (posn PIXEL PIXEL) "rect" 1) 
-  (block "block" (rand-vect2) 
-    (posn PIXEL PIXEL) "rect" 1) 
-  (block "block" (rand-vect2) 
-    (posn PIXEL PIXEL) "rect" 1)
-  (block "block" (rand-vect2)
-    (posn PIXEL PIXEL) "rect" 1)
-  (block "block" (rand-vect2) 
-    (posn PIXEL PIXEL) "rect" 1)
-  (block "block" (rand-vect2)
-    (posn PIXEL PIXEL) "rect" 1)
+(define *blocks (obj-list "blocks" (list 
+  (block "block0" (posn 320 272) 
+    (posn PIXEL PIXEL) "rect" 2) 
+  (block "block1" (posn 304 288) 
+    (posn PIXEL PIXEL) "rect" 2) 
+  (block "block2" (rand-posn)
+    (posn PIXEL PIXEL) "rect" 2) 
+  (block "block3" (rand-posn)
+    (posn PIXEL PIXEL) "rect" 2)
+  (block "block4" (rand-posn)
+    (posn PIXEL PIXEL) "rect" 2)
+  (block "block5" (rand-posn)
+    (posn PIXEL PIXEL) "rect" 2)
+  (block "block6" (rand-posn)
+    (posn PIXEL PIXEL) "rect" 2)
+  (block "block7" (rand-posn)
+    (posn PIXEL PIXEL) "rect" 2)
+  )
 ))
+
+(define *blocks2 (obj-list "blocks" (list 
+  (block "block8" (posn 32 32) 
+    (posn PIXEL PIXEL) "rect" 1) 
+  (block "block9" (posn 64 64) 
+    (posn PIXEL PIXEL) "rect" 2) 
+  )
+))
+
+(define (block-collide blk)
+  (let ([lst (get-element "blocks")])
+    (if (<= (block-hp blk) 1)
+      (remove-sub-element (item-id blk) lst)
+      (set-sub-element 
+        (struct-copy block blk
+          [hp (- (block-hp blk) 1)]
+        ) lst)
+    )
+  )
+)
 
 ;;  ---------- BLOCKS END ----------
 
@@ -336,22 +364,22 @@
     ) 
 )
 
-(define (draw-form dc e)
+(define (draw-form dc el)
   (cond
-    [(eq? (entity-form e) "rect")
-        (draw-rectangle dc e)]
-    [(eq? (entity-form e) "circle")
-        (draw-circle dc e)]
-    [else (displayln `(,(obj-id e) ,(entity-form e)))]
+    [(eq? (entity-form el) "rect")
+        (draw-rectangle dc el)]
+    [(eq? (entity-form el) "circle")
+        (draw-circle dc el)]
+    [else (displayln `(,(item-id el) ,(entity-form el)))]
 ))
 
-(define (draw-entity dc e) 
+(define (draw-entity dc el) 
   (cond
-      [(list? e) 
-        (for ([sub-e (in-list e)]) 
-          (draw-form dc sub-e))
+      [(obj-list? el)
+        (for ([sub-el (in-list (obj-list-lst el))]) 
+          (draw-form dc sub-el))
       ]
-      [else (draw-form dc e)]
+      [else (draw-form dc el)]
 ))
 
 ;;  ---------- ENTITIES END ----------
@@ -381,8 +409,8 @@
 (define (get-elements)
   (state-elements (state-box-active-state *current-state)))
 
-(define (set-elements elements)
-  (set-state (state elements (get-buttons))))
+(define (set-elements elems)
+  (set-state (state elems (get-buttons))))
 
 
 (define (get-buttons)
@@ -393,43 +421,66 @@
 
 
 (define (get-element id) (findf 
-  (lambda (el) (equal? (obj-id el) id))
+  (lambda (el) (equal? (item-id el) id))
      (get-elements)
 ))
 
-(define (get-element-lst id) (findf 
-  (lambda (el) (and (list? el) (not (empty? el))
-         (equal? (obj-id (first el)) id)))
-     (get-elements)
-))
+(define (add-element el)
+  (set-elements (cons el (get-elements)))
+)
+
+(define (remove-element id)
+  (set-elements (remove (get-element id) (get-elements)))
+)
+
+(define (set-element el)
+  (remove-element (item-id el))
+  (add-element el)
+)
+
+
+(define (get-sub-element id el-lst)(findf 
+  (lambda (el) (equal? (item-id el) id))
+     (obj-list-lst el-lst))
+)
+
+(define (add-sub-element sub-el el-lst)
+  (set-element 
+    (struct-copy obj-list el-lst
+      [lst (cons sub-el (obj-list-lst el-lst))]
+    )
+    
+  )
+)
+
+(define (remove-sub-element id el-lst)
+  (set-element 
+    (struct-copy obj-list el-lst
+      [lst (remove (get-sub-element id el-lst) 
+      (obj-list-lst el-lst))]
+    )
+  )
+)
+
+(define (set-sub-element sub-el el-lst)
+  ;(displayln `("size 1:", (length (obj-list-lst (get-element "blocks")))))
+  (remove-sub-element (item-id sub-el) el-lst)
+  (add-sub-element sub-el (get-element "blocks"))
+)
+
+(define (test)
+  (displayln "test")
+  (for ([blk (obj-list-lst (get-element "blocks"))])
+    (displayln `(,(item-id blk), (block-hp blk)))
+  )
+  (displayln `("size:", (length (obj-list-lst (get-element "blocks")))))
+
+)
 
 (define (get-lists main)
   (filter (lambda (lst)
     (and (not (null? lst))(list? lst))) 
       main)
-)
-
-(define (get-sub-element id pos)
-  (local [(define (get-element-deep id pos where)
-            (when (not (false? where))
-              (findf (lambda (el) 
-                  (and (or (equal? (obj-id el) id) (equal? id "any"))
-                      (equal? (obj-position el) pos)))
-                where)
-          ))]
-    (get-element-deep id pos
-      (findf (lambda (lst)
-        (not (false? (get-element-deep id pos lst))))
-        (get-lists (get-elements)))
-    )
-  )
-)
-
-(define (remove-element id)
-  (remove (get-element id) (get-elements)))
-
-(define (set-element element)
-  (set-elements (cons element (remove-element (obj-id element))))
 )
 
 ;;  ---------- STATES END ----------
@@ -486,10 +537,8 @@
                     (move-player PIXEL)
                     ;(displayln "move-right")
             ]
-            [(or (equal? key 'down)
-                (equal? key #\s ))
-                    (move-ball (get-dc))
-                    ;(displayln "move-right")
+            [(equal? key #\space )
+                  (test)
             ]
             [else (println key)]
         )
@@ -516,7 +565,7 @@
 
       (for ([btn (in-list (get-buttons))])
           (when (and (eq? 'left-down type) (check-hover (posn *x *y) btn)) 
-          (handle-button (obj-id btn)))
+          (handle-button (item-id btn)))
       )
 
       ; Display of any changes
