@@ -319,13 +319,59 @@
   )
 ))
 
-(define *blocks2 (obj-list "blocks" (list 
-  (block "block8" (posn 32 32) 
-    (posn PIXEL PIXEL) "rect" 1) 
-  (block "block9" (posn 64 64) 
-    (posn PIXEL PIXEL) "rect" 2) 
-  )
+
+; (define (generate-posns acc n)
+;   (if (<= n 0) acc
+;     (let ([num (random 10)])
+;       (if (member num acc)
+;         (add-blocks acc n)
+;         (add-blocks (cons num acc) (- n 1))
+;       )
+;     )
+;   )
+; )
+
+; border is a posn
+
+(define *border-left (posn 1 (/ (/ HEIGHT PIXEL) 4)))
+(define *border-right (posn (- (/ WIDTH PIXEL) 1) (/ (/ HEIGHT PIXEL) 2)))
+
+(define (generate-block-posn border-l border-r)
+  (posn (* (random (posn-x border-l) (posn-x border-r)) PIXEL)
+        (* (random (posn-y border-l) (posn-y border-r)) PIXEL)
 ))
+
+(define (generate-blocks-posns acc n border-l border-r)
+  (if (<= n 0) acc
+    (let ([r-posn (generate-block-posn border-l border-r)])
+      (if (member r-posn acc)
+        (generate-blocks-posns acc n border-l border-r)
+        (generate-blocks-posns (cons r-posn acc) (- n 1) border-l border-r)
+      )
+    )
+  )
+)
+
+; (block (~a "block" i) (list-ref posn-lst i)
+;         (posn PIXEL PIXEL) "rect" (random 3))
+
+(define (generate-blocks-list posn-lst)
+  (if (empty? posn-lst) '()
+    (cons (block (~a "block" (length posn-lst)) 
+        (first posn-lst)
+        (posn PIXEL PIXEL) "rect" (random 1 4)) 
+      (generate-blocks-list (rest posn-lst)))
+  )
+)
+
+; max n 
+(define *max-blocks-number 240) ;30x8 ;make adaptive
+
+(define (generate-blocks n)
+  (obj-list "blocks" (generate-blocks-list 
+    (generate-blocks-posns '() n *border-left *border-right)))
+)
+
 
 (define (block-collide blk)
   (let ([lst (get-element "blocks")])
@@ -470,10 +516,21 @@
 
 (define (test)
   (displayln "test")
-  (for ([blk (obj-list-lst (get-element "blocks"))])
-    (displayln `(,(item-id blk), (block-hp blk)))
+
+  (let ([tst (generate-blocks 150)])
+
+    ; (for ([blk (obj-list-lst tst)])
+    ;   (displayln `(,(item-id blk), (block-hp blk)))
+    ; )
+
+    (set-element tst)
   )
-  (displayln `("size:", (length (obj-list-lst (get-element "blocks")))))
+  ;(displayln (generate-blocks-posns '() 2 *border-left *border-right))
+
+  ; (for ([blk (obj-list-lst (get-element "blocks"))])
+  ;   (displayln `(,(item-id blk), (block-hp blk)))
+  ; )
+  ; (displayln `("size:", (length (obj-list-lst (get-element "blocks")))))
 
 )
 
