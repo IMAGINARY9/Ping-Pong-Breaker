@@ -1,17 +1,20 @@
 #lang racket
 (require racket/gui)
+(require rackunit)
 
 ;;  ---------- DEFINITIONS ----------
 
 ; Screen size constants to create gameboard
 (define WIDTH 512)
-(define HEIGHT 512)
+(define HEIGHT 768)
 
 (define PIXEL 16)
 
+
 ;(define FRAME-RATE 17) ;60fps
 ;(define FRAME-RATE 8) ;120fps
-(define FRAME-RATE 4) ;240fps
+(define FRAME-RATE 4) ;250fps
+;(define FRAME-RATE 1) ;1000fps
 
 ; (define solid-color  (new brush% [color "colorname"]))
 ; (define default (new brush% [color "white"][style 'opaque]))
@@ -20,6 +23,9 @@
 
 ;;  ---------- TOOLS ----------
 
+;; Data type
+;; posn is a structure (posn x y)  
+;; interpretation: a prefab struct representing a point in 2d space
 (struct posn (x y) #:transparent)
 
 (define/match (posn-add posn1 posn2)
@@ -67,10 +73,30 @@
 (define (rand-pos-y) (* (random PIXEL (/ HEIGHT PIXEL)) PIXEL))
 (define (rand-posn) (posn (rand-pos-x) (rand-pos-y)))
 
+(define (rand-posn-min-max a b) (posn (random a b) (random a b)))
+
+; border is a posn
+(define BLOCKS-BORDER-LU (posn 1 (/ (/ HEIGHT PIXEL) 8)))
+(define BLOCKS-BORDER-RD (posn (- (/ WIDTH PIXEL) 1) (/ (/ HEIGHT PIXEL) 2)))
+
+(define MAX-BLOCKS-NUMBER 
+  (* (- (posn-y BLOCKS-BORDER-RD) (posn-y BLOCKS-BORDER-LU)) 
+      (- (posn-x BLOCKS-BORDER-RD) (posn-x BLOCKS-BORDER-LU)))
+) ;30x8 ;240
+
+;; Data type
+;; obj is a structure (obj id position size)
+;; where id is a Number, position and size is a posn
+;; interpretation: a prefab struct representing object in application
+
 (struct item (id) #:transparent)
 (struct obj item (position size) #:transparent)
 (struct obj-list item (lst) #:transparent)
 
+; check-hover : posn, obj -> Boolean
+; does the point overlap with the object
+; header: (define (check-hover p obj)
+; template: (define (check-hover p obj) (and ... p obj ...))
 (define (check-hover p obj)
   (and 
     (>= (posn-x p) (posn-x (obj-position obj))) 
@@ -82,12 +108,26 @@
   )
 )
 
+; tests
+(check-equal? (check-hover (posn 150 150) 
+  (obj "test-hover-obj" (posn 120 120) (posn 50 50))) #t)
+(check-equal? (check-hover (posn 150 150) 
+  (obj "test-hover-obj" (posn 200 100) (posn 50 50))) #f)
+
 ;;  ---------- TOOLS END ----------
 
 ;;  ---------- BUTTONS ----------
 
+;; Data type
+;; button is a structure inherited from an obj (button id position size text)
+;; where text is a String
+;; interpretation: a prefab struct representing button in application
 (struct button obj (text))
 
+; draw-button : dc, b -> Void
+; draw button on canvas
+; header: (define (draw-button dc b)
+; template: (define (draw-button dc b) (send dc ... b ...))
 (define (draw-button dc b)
   (let* ([pos (obj-position b)]
             [sz (obj-size b)])
@@ -109,6 +149,10 @@
 )
 )
 
+; handle-button : button-id -> Void
+; button handling by button id
+; header: (define (handle-button button-id)
+; template: (define (handle-button button-id) (cond ... button-id ...)
 (define (handle-button button-id)
   (cond
   [(eq? button-id "play-btn") 
@@ -119,28 +163,60 @@
     (set-state menu-state)
     (send canvas quit-game)
   ]
+  [(eq? button-id "pause-game-btn") 
+    (send canvas quit-game)
+    (remove-button "pause-game-btn")
+    (add-button continue-game-button)
+  ]
+  [(eq? button-id "continue-game-btn") 
+    (send canvas play-game)
+    (remove-button "continue-game-btn")
+    (add-button pause-game-button)
+  ]
   [(eq? button-id "exit-app-btn") (send f show #f)]
   [else (display button-id)]
   )
 )
 
-(define play-button (button "play-btn" (posn 128 128) (posn 64 32) "Play"))
-(define exit-button (button "exit-app-btn" (posn 256 256) (posn 64 32) "Exit"))
-(define exit-game-button (button "exit-game-btn" (posn 256 128) (posn 64 32) "Exit"))
+(define play-button (button "play-btn" 
+  (posn (- (/ WIDTH 2)(/ WIDTH 4 2)) (/ HEIGHT 3)) 
+  (posn (/ WIDTH 4) (/ HEIGHT 20)) "Play"))
+
+(define exit-button (button "exit-app-btn" 
+  (posn (- (/ WIDTH 2)(/ WIDTH 4 2)) (/ HEIGHT 2)) 
+  (posn (/ WIDTH 4) (/ HEIGHT 20)) "Exit"))
+
+(define exit-game-button (button "exit-game-btn" 
+  (posn 16 16) (posn 64 32) "Exit"))
+
+(define pause-game-button (button "pause-game-btn" 
+  (posn 256 128) (posn 64 32) "Pause"))
+
+(define continue-game-button (button "continue-game-btn" 
+  (posn 256 128) (posn 64 32) "Continue"))
 
 ;;  ---------- BUTTONS END ----------
 
 ;;  ---------- ENTITIES ----------
 
+;; Data type
+;; entity is a structure inherited from an obj (entity id position size form)
+;; where form is a String
+;; interpretation: a prefab struct representing game entity that can be drawn
 (struct entity obj (form))
 
 ;;  ---------- PLAYER ----------
 
+;; player is an initial manipulable entity, your actor
 (define *player (entity "player" 
   (posn (- (/ WIDTH 2) (* PIXEL 2)) (- HEIGHT (* PIXEL 4))) 
   (posn (* PIXEL 4) PIXEL) "rect"))
 
-(define (move-player x )
+; move-player : Number -> Void
+; move player on by x coord
+; header: (define (move-player x)
+; template: (move-player x) (... x ...)
+(define (move-player x)
   (let ([pl (get-element "player")])
   (unless (false? pl)
 
@@ -166,17 +242,33 @@
 
 ;;  ---------- BALL ----------
 
+;; Data type
+;; ball is a structure inherited from an entity (ball id position size form direction)
+;; where direction is a posn
+;; interpretation: a prefab struct representing game ball
 (struct ball entity (direction))
 
+;; *ball is a initial game ball
 (define *ball (ball "ball"
   (posn (/ WIDTH 2) (/ HEIGHT 2)) 
   (posn PIXEL PIXEL)
-  "circle" (posn-normalize (posn 1 1))))
+  "circle" (posn-normalize (posn 0 1))))
 
+; change-ball-direction : b new-dir -> Void
+; set new value to direction of game ball
+; header: (define (change-ball-direction b new-dir)
+; template: (define (change-ball-direction b new-dir) (... b new-dir ...)
 (define (change-ball-direction b new-dir)
+  (displayln new-dir) 
   (set-element 
         (struct-copy ball b
-          [direction (posn-normalize new-dir)])
+          [direction (posn-normalize 
+            (cond
+              [(integer? (posn-x new-dir)) (posn-add new-dir (posn 0.1 0.5))]
+              [(integer? (posn-y new-dir)) (posn-add new-dir (posn -0.5 -0.1))]
+              [else new-dir]
+            )
+          )])
       )
 )
 
@@ -223,7 +315,7 @@
 )
 
 
-(define (check-ball-points b obj-lst n dc)
+(define (check-ball-points b obj-lst n)
   (unless (false? b)
     (let* ([angl (/ 360 n)]
             [radius (/ (posn-x (obj-size b)) 2)]
@@ -248,23 +340,23 @@
    )
 )
 
-(define (check-ball-direction b dc)
+(define (check-ball-direction b)
 
   ; if (#t and is block) block-hp--
   ; teleport if center is hover
-  (check-ball-points b (cons (get-element "player") '()) 1 dc) 
-  (check-ball-points b (obj-list-lst (get-element "blocks")) 16 dc)
-  (check-ball-points b (obj-list-lst (get-element "walls")) 4 dc)
+  (check-ball-points b (cons (get-element "player") '()) 1) 
+  (check-ball-points b (obj-list-lst (get-element "blocks")) 16)
+  (check-ball-points b (obj-list-lst (get-element "walls")) 4)
 
   ; change dir
   ; return
   (ball-direction (get-element "ball"))
 )
 
-  (define (move-ball dc)
+  (define (update-ball)
     (let ([b (get-element "ball")])  
 
-    (let* ([new-dir (check-ball-direction b dc)]
+    (let* ([new-dir (check-ball-direction b)]
             [new-pos (posn-add (obj-position b)
                           new-dir)])
 
@@ -281,6 +373,7 @@
 
 ;;  ---------- WALLS ----------
 
+; *walls is an initial List<Entity>
 (define *walls (obj-list "walls" (list 
   (entity "wall0" (posn 0 0) (posn PIXEL HEIGHT)
     "rect") 
@@ -297,8 +390,13 @@
 
 ;;  ---------- BLOCKS ----------
 
+;; Data type
+;; block is a structure inherited from an entity (block id position size form hp)
+;; where hp is a Number
+;; interpretation: a prefab struct representing block
 (struct block entity (hp))
 
+; *blocks is an initial List<Entity>
 (define *blocks (obj-list "blocks" (list 
   (block "block0" (posn 320 272) 
     (posn PIXEL PIXEL) "rect" 2) 
@@ -319,23 +417,6 @@
   )
 ))
 
-
-; (define (generate-posns acc n)
-;   (if (<= n 0) acc
-;     (let ([num (random 10)])
-;       (if (member num acc)
-;         (add-blocks acc n)
-;         (add-blocks (cons num acc) (- n 1))
-;       )
-;     )
-;   )
-; )
-
-; border is a posn
-
-(define *border-left (posn 1 (/ (/ HEIGHT PIXEL) 4)))
-(define *border-right (posn (- (/ WIDTH PIXEL) 1) (/ (/ HEIGHT PIXEL) 2)))
-
 (define (generate-block-posn border-l border-r)
   (posn (* (random (posn-x border-l) (posn-x border-r)) PIXEL)
         (* (random (posn-y border-l) (posn-y border-r)) PIXEL)
@@ -352,9 +433,6 @@
   )
 )
 
-; (block (~a "block" i) (list-ref posn-lst i)
-;         (posn PIXEL PIXEL) "rect" (random 3))
-
 (define (generate-blocks-list posn-lst)
   (if (empty? posn-lst) '()
     (cons (block (~a "block" (length posn-lst)) 
@@ -364,12 +442,12 @@
   )
 )
 
-; max n 
-(define *max-blocks-number 240) ;30x8 ;make adaptive
-
 (define (generate-blocks n)
   (obj-list "blocks" (generate-blocks-list 
-    (generate-blocks-posns '() n *border-left *border-right)))
+    (generate-blocks-posns '() 
+      (if (< n MAX-BLOCKS-NUMBER) n MAX-BLOCKS-NUMBER)
+     BLOCKS-BORDER-LU BLOCKS-BORDER-RD))
+  )
 )
 
 
@@ -387,6 +465,10 @@
 
 ;;  ---------- BLOCKS END ----------
 
+; draw-rectangle : dc, b -> Void
+; draw o - object rectangle form on canvas
+; header: (define (draw-rectangle dc b)
+; template: (define (draw-rectangle dc b) (send dc draw-rectangle ... o ...))
 (define (draw-rectangle dc o)
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
@@ -398,6 +480,10 @@
         (posn-y sz))
 ))
 
+; draw-circle : dc, b -> Void
+; draw o - object circle form on canvas
+; header: (define (draw-circle dc b)
+; template: (define (draw-circle dc b) (send dc draw-ellipse ... o ...))
 (define (draw-circle dc o)
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
@@ -410,6 +496,10 @@
     ) 
 )
 
+; draw-form : dc, el -> Void
+; call the function depend on element form
+; header: (define (draw-form dc el)
+; template: (define (draw-form dc el) (cond ... (entity-form el) ...))
 (define (draw-form dc el)
   (cond
     [(eq? (entity-form el) "rect")
@@ -419,7 +509,11 @@
     [else (displayln `(,(item-id el) ,(entity-form el)))]
 ))
 
-(define (draw-entity dc el) 
+; draw-element : dc, el -> Void
+; call the function depend on element type
+; header: (define (draw-element dc el)
+; template: (define (draw-element dc el) (cond ... (el ...) ...)
+(define (draw-element dc el) 
   (cond
       [(obj-list? el)
         (for ([sub-el (in-list (obj-list-lst el))]) 
@@ -438,53 +532,130 @@
 
 ;;  ---------- STATES ----------
 
+;; Data type
+;; element is an any game element
+;; - obj
+;; - button ...
+
+;; Data type
+;; state is a structure (state elements buttons)
+;; where elements, buttons is a List<obj>
+;; interpretation: a prefab struct representing world-state  
 (struct state (elements buttons))
 ; (struct state (elements buttons titles))
 
 (define menu-state (state '() (list play-button exit-button)))
-(define game-state (state (list *player *ball *blocks *walls) (list exit-game-button)))
+(define game-state (state (list *player *ball *blocks *walls) 
+                          (list pause-game-button exit-game-button)))
 
+;; Data type
+;; state-box is a structure (state active-state)
+;; where active-state is a state
+;; interpretation: a prefab struct contain active world-state
 (struct state-box (active-state))
 
+; *current-state is an initial state 
 (define *current-state (state-box menu-state))
 
+; set-state : dc, el -> Void
+; set new current state
+; header: (define (set-state state)
+; template: (define (set-state state) (set! ... state ...)
 (define (set-state state)
  (set! *current-state (state-box state)))
 
-
+; get-elements : -> List<Elements>
+; get list of current elements
+; header: (define (get-elements)
+; template: (define (get-elements) (...)
 (define (get-elements)
   (state-elements (state-box-active-state *current-state)))
 
+; test
+(check-equal? (get-elements) '())
+
+; set-elements : List<Elements> -> Void
+; set new current elements
+; header: (define (set-elements elems)
+; template: (define (set-elements elems) (...)
 (define (set-elements elems)
   (set-state (state elems (get-buttons))))
 
-
+; get-buttons : -> List<Buttons>
+; get list of current buttons
+; header: (define (get-buttons)
+; template: (define (get-buttons) (...)
 (define (get-buttons)
   (state-buttons (state-box-active-state *current-state)))
 
+; test
+(check-equal? (get-buttons) (list play-button exit-button))
+
+; set-buttons : List<Buttons> -> Void
+; set new current buttons
+; header: (define (set-buttons buttons)
+; template: (define (set-buttons buttons) (...)
 (define (set-buttons buttons)
   (set-state (state (get-elements) buttons)))
 
+; get-element : String -> obj
+; get element by id
+; header: (define (get-element id)
+; template: (define (get-element id) (findf (lambda (...) ... id ...) ...)
+(define (get-button id) (findf 
+  (lambda (el) (equal? (item-id el) id))
+     (get-buttons)
+))
 
+(define (add-button el)
+  (set-buttons (cons el (get-buttons)))
+)
+
+; remove-element : String -> Void
+; remove element by id
+; header: (define (remove-element id)
+; template: (define (remove-element id) (remove (...) ...)
+(define (remove-button id)
+  (set-buttons (remove (get-button id) (get-buttons)))
+)
+
+
+; get-element : String -> obj
+; get element by id
+; header: (define (get-element id)
+; template: (define (get-element id) (findf (lambda (...) ... id ...) ...)
 (define (get-element id) (findf 
   (lambda (el) (equal? (item-id el) id))
      (get-elements)
 ))
 
+; test
+(check-equal? (get-element "player") #f)
+
 (define (add-element el)
   (set-elements (cons el (get-elements)))
 )
 
+; remove-element : String -> Void
+; remove element by id
+; header: (define (remove-element id)
+; template: (define (remove-element id) (remove (...) ...)
 (define (remove-element id)
   (set-elements (remove (get-element id) (get-elements)))
 )
 
+; set-element : obj -> Void
+; remove element by id
+; header: (define (set-element id)
+; template: (define (set-element id) (remove (...) ...)
 (define (set-element el)
   (remove-element (item-id el))
   (add-element el)
 )
 
-
+; get-sub-element : String, List<obj> -> obj
+; get element from lists by id and position
+; header: (define (get-sub-element id el-lst)
 (define (get-sub-element id el-lst)(findf 
   (lambda (el) (equal? (item-id el) id))
      (obj-list-lst el-lst))
@@ -495,7 +666,6 @@
     (struct-copy obj-list el-lst
       [lst (cons sub-el (obj-list-lst el-lst))]
     )
-    
   )
 )
 
@@ -556,7 +726,8 @@
     (inherit get-dc)
 
     (define (tick)
-      (move-ball (get-dc))
+      (update-ball)
+      (update-ball)
       (paint-callback this 'y)
     )
 
@@ -570,6 +741,14 @@
     )
 
     (define/public (quit-game)
+      (send game-timer stop)
+    )
+
+    (define/public (win-game)
+      (send game-timer stop)
+    )
+
+    (define/public (lose-game)
       (send game-timer stop)
     )
 
@@ -647,7 +826,7 @@
       ;; draw
 
       (for ([e (in-list (get-elements))])
-          (draw-entity dc e)
+          (draw-element dc e)
       )
 
       (for ([btn (in-list (get-buttons))])
