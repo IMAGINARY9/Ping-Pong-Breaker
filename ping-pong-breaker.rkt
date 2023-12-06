@@ -267,42 +267,24 @@
   (posn PIXEL PIXEL) brush-ball
   "circle" (posn-normalize (posn 0 1))))
 
-; change-ball-direction : b new-dir -> Void
-; set new value to direction of game ball
-; header: (define (change-ball-direction b new-dir)
-; template: (define (change-ball-direction b new-dir) (... b new-dir ...)
-(define (change-ball-direction b new-dir)
-  ;(displayln new-dir) 
-  (set-element 
-        (struct-copy ball b
-          [direction (posn-normalize 
-            (cond
-              [(integer? (posn-x new-dir)) (posn-add new-dir (posn 0.1 0.5))]
-              [(integer? (posn-y new-dir)) (posn-add new-dir (posn -0.5 -0.1))]
-              [else new-dir]
-            )
-          )])
-      )
-)
-
 (define (calc-new-direction current-dir norm-dir)
   (posn-substract current-dir
               (posn-multiply-val (posn-product 
                 current-dir norm-dir norm-dir) 2)
             )
 )
-(define (get-ball-point n angl r c)
+(define (get-ball-point n angl r c offset)
   (posn
-    (+ (posn-x c)(* r (cos (degrees->radians (+ (* n angl) 90)))))
-    (+ (posn-y c)(* r (sin (degrees->radians (+ (* n angl) 90)))))
+    (+ (posn-x c)(* r (cos (degrees->radians (+ (* n angl) offset)))))
+    (+ (posn-y c)(* r (sin (degrees->radians (+ (* n angl) offset)))))
   )
 )
 
-(define (get-ball-points n angl radius center)
+(define (get-ball-points n angl radius center offset)
   (cond
     [(<= n 0) '()]
-    [(cons (get-ball-point n angl radius center) 
-      (get-ball-points (- n 1) angl radius center))
+    [(cons (get-ball-point n angl radius center offset) 
+      (get-ball-points (- n 1) angl radius center offset))
     ]
   )
 )
@@ -327,67 +309,64 @@
   )
 )
 
-; refactor
-(define (check-ball-points b obj-lst n)
+(define (check-ball-points b obj-lst n [offset 0])
   (unless (false? b)
     (let* ([angl (/ 360 n)]
             [radius (/ (posn-x (obj-size b)) 2)]
             [center (posn-add-val (obj-position b) radius)]
-            [points (get-ball-points n angl radius center)]
+            [points (get-ball-points n angl radius center offset)]
             [res (check-points-cols points obj-lst)])
 
-      (unless (equal? res (posn 0 0)) 
-        (change-ball-direction b
-          (calc-new-direction (ball-direction b) 
-            (posn-normalize (posn-substract res center)))
-        )
+      (if (equal? res (posn 0 0)) (posn 0 0)
+        (calc-new-direction (ball-direction b) 
+           (posn-normalize (posn-substract res center)))
       )
-      ; return
-      (calc-new-direction (ball-direction b) 
-            (posn-normalize (posn-substract res center)))
     )
    )
 )
 
-; refactor
-(define (check-ball-direction b)
-
-  ; if (#t and is block) block-hp--
-  ; teleport if center is hover
-  (check-ball-points b (cons (get-element "player") '()) 1)
-  (check-ball-points b (obj-list-lst (get-element "blocks")) 16)
-  (check-ball-points b (obj-list-lst (get-element "walls")) 4)
-  ;(displayln "-")
-
-  ; change dir
-  ; return
-  (ball-direction (get-element "ball"))
+(define (get-all-collisions b)
+  (posn-sum
+    (check-ball-points b (cons (get-element "player") '()) 1 90)
+    (check-ball-points b (obj-list-lst (get-element "blocks")) 16)
+    (check-ball-points b (obj-list-lst (get-element "walls")) 4)
+  )
+)
+; change-ball-direction : b new-dir -> Void
+; set new value to direction of game ball
+; header: (define (change-ball-direction b new-dir)
+; template: (define (change-ball-direction b new-dir) (... b new-dir ...)
+(define (change-ball-direction new-dir)
+  ;(displayln new-dir)
+  (unless (equal? new-dir (posn 0 0))
+    (let ([b (get-element "ball")])
+      (set-element (struct-copy ball b
+          [direction (posn-normalize
+            (cond
+              [(integer? (posn-x new-dir)) (posn-add new-dir (posn 0.1 0.5))]
+              [(integer? (posn-y new-dir)) (posn-add new-dir (posn -0.5 -0.1))]
+              [else new-dir]
+            )
+          )]
+      )
+    ))
+  )
 )
 
-; refactor
+(define (move-ball)
+  (let ([b (get-element "ball")])
+    (set-element (struct-copy ball b
+          [position #:parent obj 
+            (posn-add (obj-position b) 
+            (ball-direction b))])
+    ))
+)
+
 (define (update-ball)
-  (let* ([b (get-element "ball")]
-         [new-dir (check-ball-direction b)]
-         [new-pos (posn-add (obj-position b)
-                            new-dir)])
-
-    (set-element
-     (struct-copy ball b
-          [position #:parent obj new-pos]
-          [direction new-dir])
-    )
-    ; return
-    ; new-pos
-    ;(displayln (posn-y new-pos))
-    ; (cond
-    ;   [(< (posn-y new-pos) 0) (send canvas win-game)]
-    ;   [(> (posn-y new-pos) ;HEIGHT)
-    ;     (posn-y (obj-position (get-element "player"))))
-    ;     (send canvas lose-game)]
-    ; )
-
-    )
-  )
+    (move-ball)
+    (change-ball-direction
+     (get-all-collisions (get-element "ball")))
+)
 
 ;;  ---------- BALL END ----------
 
@@ -441,7 +420,7 @@
   )
 )
 
-(define (get-block-color hp)
+(define (get-block-brush hp)
   (cond
     [(= hp 1) brush-block1]
     [(= hp 2) brush-block2]
@@ -452,9 +431,10 @@
 
 (define (generate-blocks-list posn-lst)
   (if (empty? posn-lst) '()
-    (cons (let ([hp (random 1 4)]) (block (~a "block" (length posn-lst)) 
+    (cons (let ([hp (random 1 4)]) 
+      (block (~a "block" (length posn-lst)) 
         (first posn-lst) (posn PIXEL PIXEL) 
-        (get-block-color hp) "rect" hp))
+        (get-block-brush hp) "rect" hp))
       (generate-blocks-list (rest posn-lst)))
   )
 )
@@ -476,8 +456,7 @@
         (set-sub-element 
         (struct-copy block blk
           [hp new-hp]
-          [brush #:parent obj (get-block-color new-hp)]
-          ; color
+          [brush #:parent obj (get-block-brush new-hp)]
         ) lst)
       )
     )
