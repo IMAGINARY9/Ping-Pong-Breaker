@@ -16,8 +16,18 @@
 (define FRAME-RATE 4) ;250fps
 ;(define FRAME-RATE 1) ;1000fps
 
-; (define solid-color  (new brush% [color "colorname"]))
-; (define default (new brush% [color "white"][style 'opaque]))
+;(define solid-color  (new brush% [color "colorname"]))
+(define brush-button  (new brush% [color (make-object color% 250 210 205)]))
+
+(define brush-ball (new brush% [color (make-object color% 60 60 125)]))
+(define brush-player (new brush% [color (make-object color% 250 210 205)]))
+(define brush-wall (new brush% [color (make-object color% 240 140 135)]))
+(define brush-block1 (new brush% [color (make-object color% 250 210 170)]))
+(define brush-block2 (new brush% [color (make-object color% 250 160 135)]))
+(define brush-block3 (new brush% [color (make-object color% 245 125 130)]))
+(define background-color (make-object color% 160 85 120))
+
+(define default (new brush% [color "white"][style 'opaque]))
 
 ;;  ---------- DEFINITIONS END ----------
 
@@ -90,7 +100,7 @@
 ;; interpretation: a prefab struct representing object in application
 
 (struct item (id) #:transparent)
-(struct obj item (position size) #:transparent)
+(struct obj item (position size brush) #:transparent)
 (struct obj-list item (lst) #:transparent)
 
 ; check-hover : posn, obj -> Boolean
@@ -110,9 +120,9 @@
 
 ; tests
 (check-equal? (check-hover (posn 150 150) 
-  (obj "test-hover-obj" (posn 120 120) (posn 50 50))) #t)
+  (obj "test-hover-obj" (posn 120 120) (posn 50 50) brush-button)) #t)
 (check-equal? (check-hover (posn 150 150) 
-  (obj "test-hover-obj" (posn 200 100) (posn 50 50))) #f)
+  (obj "test-hover-obj" (posn 200 100) (posn 50 50) brush-button)) #f)
 
 ;;  ---------- TOOLS END ----------
 
@@ -131,6 +141,8 @@
 (define (draw-button dc b)
   (let* ([pos (obj-position b)]
             [sz (obj-size b)])
+
+      (send dc set-brush (obj-brush b))
                 
       (send dc draw-rectangle
         (posn-x pos)
@@ -157,7 +169,7 @@
   (cond
   [(eq? button-id "play-btn") 
     (set-state game-state)
-    (send canvas play-game)
+    (send canvas init-game)
   ]
   [(eq? button-id "exit-game-btn") 
     (set-state menu-state)
@@ -176,24 +188,25 @@
   [(eq? button-id "exit-app-btn") (send f show #f)]
   [else (display button-id)]
   )
+  (send canvas paint-call)
 )
 
 (define play-button (button "play-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 4 2)) (/ HEIGHT 3)) 
-  (posn (/ WIDTH 4) (/ HEIGHT 20)) "Play"))
+  (posn (/ WIDTH 4) (/ HEIGHT 20)) brush-button "Play"))
 
 (define exit-button (button "exit-app-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 4 2)) (/ HEIGHT 2)) 
-  (posn (/ WIDTH 4) (/ HEIGHT 20)) "Exit"))
+  (posn (/ WIDTH 4) (/ HEIGHT 20)) brush-button "Exit"))
 
 (define exit-game-button (button "exit-game-btn" 
-  (posn 16 16) (posn 64 32) "Exit"))
+  (posn 16 16) (posn 64 32) brush-button "Exit"))
 
 (define pause-game-button (button "pause-game-btn" 
-  (posn 256 128) (posn 64 32) "Pause"))
+  (posn 256 128) (posn 64 32) brush-button "Pause"))
 
 (define continue-game-button (button "continue-game-btn" 
-  (posn 256 128) (posn 64 32) "Continue"))
+  (posn 256 128) (posn 64 32) brush-button "Continue"))
 
 ;;  ---------- BUTTONS END ----------
 
@@ -202,7 +215,7 @@
 ;; Data type
 ;; entity is a structure inherited from an obj (entity id position size form)
 ;; where form is a String
-;; interpretation: a prefab struct representing game entity that can be drawn
+;; interpretation: a prefab struct representing game entity that can be drawn by form
 (struct entity obj (form))
 
 ;;  ---------- PLAYER ----------
@@ -210,7 +223,7 @@
 ;; player is an initial manipulable entity, your actor
 (define *player (entity "player" 
   (posn (- (/ WIDTH 2) (* PIXEL 2)) (- HEIGHT (* PIXEL 4))) 
-  (posn (* PIXEL 4) PIXEL) "rect"))
+  (posn (* PIXEL 4) PIXEL) brush-player "rect"))
 
 ; move-player : Number -> Void
 ; move player on by x coord
@@ -251,7 +264,7 @@
 ;; *ball is a initial game ball
 (define *ball (ball "ball"
   (posn (/ WIDTH 2) (/ HEIGHT 2)) 
-  (posn PIXEL PIXEL)
+  (posn PIXEL PIXEL) brush-ball
   "circle" (posn-normalize (posn 0 1))))
 
 ; change-ball-direction : b new-dir -> Void
@@ -259,7 +272,7 @@
 ; header: (define (change-ball-direction b new-dir)
 ; template: (define (change-ball-direction b new-dir) (... b new-dir ...)
 (define (change-ball-direction b new-dir)
-  (displayln new-dir) 
+  ;(displayln new-dir) 
   (set-element 
         (struct-copy ball b
           [direction (posn-normalize 
@@ -314,7 +327,7 @@
   )
 )
 
-
+; refactor
 (define (check-ball-points b obj-lst n)
   (unless (false? b)
     (let* ([angl (/ 360 n)]
@@ -323,49 +336,56 @@
             [points (get-ball-points n angl radius center)]
             [res (check-points-cols points obj-lst)])
 
-      ; (for ([p (in-list points)])
-      ;   (send dc draw-ellipse
-      ;     (posn-x p) (posn-y p) 2 2
-      ;   )
-      ; )
-
       (unless (equal? res (posn 0 0)) 
         (change-ball-direction b
           (calc-new-direction (ball-direction b) 
             (posn-normalize (posn-substract res center)))
         )
       )
-
+      ; return
+      (calc-new-direction (ball-direction b) 
+            (posn-normalize (posn-substract res center)))
     )
    )
 )
 
+; refactor
 (define (check-ball-direction b)
 
   ; if (#t and is block) block-hp--
   ; teleport if center is hover
-  (check-ball-points b (cons (get-element "player") '()) 1) 
+  (check-ball-points b (cons (get-element "player") '()) 1)
   (check-ball-points b (obj-list-lst (get-element "blocks")) 16)
   (check-ball-points b (obj-list-lst (get-element "walls")) 4)
+  ;(displayln "-")
 
   ; change dir
   ; return
   (ball-direction (get-element "ball"))
 )
 
-  (define (update-ball)
-    (let ([b (get-element "ball")])  
+; refactor
+(define (update-ball)
+  (let* ([b (get-element "ball")]
+         [new-dir (check-ball-direction b)]
+         [new-pos (posn-add (obj-position b)
+                            new-dir)])
 
-    (let* ([new-dir (check-ball-direction b)]
-            [new-pos (posn-add (obj-position b)
-                          new-dir)])
-
-    (set-element 
-        (struct-copy ball b
+    (set-element
+     (struct-copy ball b
           [position #:parent obj new-pos]
           [direction new-dir])
-      )
     )
+    ; return
+    ; new-pos
+    ;(displayln (posn-y new-pos))
+    ; (cond
+    ;   [(< (posn-y new-pos) 0) (send canvas win-game)]
+    ;   [(> (posn-y new-pos) ;HEIGHT)
+    ;     (posn-y (obj-position (get-element "player"))))
+    ;     (send canvas lose-game)]
+    ; )
+
     )
   )
 
@@ -376,13 +396,13 @@
 ; *walls is an initial List<Entity>
 (define *walls (obj-list "walls" (list 
   (entity "wall0" (posn 0 0) (posn PIXEL HEIGHT)
-    "rect") 
+    brush-wall "rect") 
   (entity "wall1" (posn (- WIDTH PIXEL) 0) (posn PIXEL HEIGHT) 
-    "rect")
+    brush-wall "rect")
   (entity "wall2" (posn 0 0) (posn WIDTH PIXEL) 
-    "rect")
+    brush-wall "rect")
   (entity "wall3" (posn 0 (- HEIGHT PIXEL PIXEL)) (posn WIDTH PIXEL) 
-    "rect")
+    brush-wall "rect")
     )
 ))
 
@@ -399,21 +419,9 @@
 ; *blocks is an initial List<Entity>
 (define *blocks (obj-list "blocks" (list 
   (block "block0" (posn 320 272) 
-    (posn PIXEL PIXEL) "rect" 2) 
+    (posn PIXEL PIXEL) brush-button "rect" 2) 
   (block "block1" (posn 304 288) 
-    (posn PIXEL PIXEL) "rect" 2) 
-  (block "block2" (rand-posn)
-    (posn PIXEL PIXEL) "rect" 2) 
-  (block "block3" (rand-posn)
-    (posn PIXEL PIXEL) "rect" 2)
-  (block "block4" (rand-posn)
-    (posn PIXEL PIXEL) "rect" 2)
-  (block "block5" (rand-posn)
-    (posn PIXEL PIXEL) "rect" 2)
-  (block "block6" (rand-posn)
-    (posn PIXEL PIXEL) "rect" 2)
-  (block "block7" (rand-posn)
-    (posn PIXEL PIXEL) "rect" 2)
+    (posn PIXEL PIXEL) brush-button "rect" 2) 
   )
 ))
 
@@ -433,11 +441,20 @@
   )
 )
 
+(define (get-block-color hp)
+  (cond
+    [(= hp 1) brush-block1]
+    [(= hp 2) brush-block2]
+    [(= hp 3) brush-block3]
+    [else default]
+  )
+)
+
 (define (generate-blocks-list posn-lst)
   (if (empty? posn-lst) '()
-    (cons (block (~a "block" (length posn-lst)) 
-        (first posn-lst)
-        (posn PIXEL PIXEL) "rect" (random 1 4)) 
+    (cons (let ([hp (random 1 4)]) (block (~a "block" (length posn-lst)) 
+        (first posn-lst) (posn PIXEL PIXEL) 
+        (get-block-color hp) "rect" hp))
       (generate-blocks-list (rest posn-lst)))
   )
 )
@@ -455,10 +472,14 @@
   (let ([lst (get-element "blocks")])
     (if (<= (block-hp blk) 1)
       (remove-sub-element (item-id blk) lst)
-      (set-sub-element 
+      (let ([new-hp (- (block-hp blk) 1)])
+        (set-sub-element 
         (struct-copy block blk
-          [hp (- (block-hp blk) 1)]
+          [hp new-hp]
+          [brush #:parent obj (get-block-color new-hp)]
+          ; color
         ) lst)
+      )
     )
   )
 )
@@ -473,6 +494,8 @@
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
                 
+      (send dc set-brush (obj-brush o))
+
       (send dc draw-rectangle
         (posn-x pos)
         (posn-y pos)
@@ -487,6 +510,8 @@
 (define (draw-circle dc o)
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
+
+      (send dc set-brush (obj-brush o))
                 
       (send dc draw-ellipse
         (posn-x pos)
@@ -687,14 +712,6 @@
 (define (test)
   (displayln "test")
 
-  (let ([tst (generate-blocks 150)])
-
-    ; (for ([blk (obj-list-lst tst)])
-    ;   (displayln `(,(item-id blk), (block-hp blk)))
-    ; )
-
-    (set-element tst)
-  )
   ;(displayln (generate-blocks-posns '() 2 *border-left *border-right))
 
   ; (for ([blk (obj-list-lst (get-element "blocks"))])
@@ -736,6 +753,11 @@
            [notify-callback tick] [interval #f])
     )
 
+    (define/public (init-game)
+      (set-element (generate-blocks 100))
+      (play-game)
+    )
+
     (define/public (play-game)
       (send game-timer start FRAME-RATE)
     )
@@ -752,7 +774,9 @@
       (send game-timer stop)
     )
 
-
+    (define/public (paint-call)
+      (paint-callback this 'y)
+    )
 
     ; Overridden on-char function for checking custom keystrokes on the keyboard 
     (define/override (on-char key-event)
@@ -779,9 +803,8 @@
             [else (println key)]
         )
 
-
         ; Display of any changes
-        (paint-callback this 'y)
+        ;(paint-callback this 'y)
     )
 
     (define *x 0)
@@ -805,32 +828,26 @@
       )
 
       ; Display of any changes
-      (paint-callback this 'y)
+      ;(paint-callback this 'y)
       )
 
     (define (paint-callback _self _evt)
-      ; (cond
-      ;   ; [(empty? *points)
-      ;   ;  (send (send this get-dc) clear)]
-        ; [*on-board
-        ;  (displayln `("x: ", *x))
-        ;  (displayln `("y: ", *y))]
-      ;   [else (displayln "out")]
-      ;   )
-      ;(displayln "p-clbk")
       ; a dc object is a drawing context for drawing graphics and text
-      (define dc (get-dc))
-      ; Clear old changes
-      (send dc clear)
+      (let ([dc (get-dc)])
+        ; Clear old changes
+        (send dc clear)
 
-      ;; draw
+        (send dc set-background background-color)
 
-      (for ([e (in-list (get-elements))])
-          (draw-element dc e)
-      )
+        ;; draw
 
-      (for ([btn (in-list (get-buttons))])
-          (draw-button dc btn)
+        (for ([e (in-list (get-elements))])
+            (draw-element dc e)
+        )
+
+        (for ([btn (in-list (get-buttons))])
+            (draw-button dc btn)
+        )
       )
 
       )
