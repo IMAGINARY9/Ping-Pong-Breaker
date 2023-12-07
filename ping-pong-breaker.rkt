@@ -5,11 +5,10 @@
 ;;  ---------- DEFINITIONS ----------
 
 ; Screen size constants to create gameboard
-(define WIDTH 512)
-(define HEIGHT 768)
-
 (define PIXEL 16)
 
+(define WIDTH 512)
+(define HEIGHT 768)
 
 ;(define FRAME-RATE 17) ;60fps
 ;(define FRAME-RATE 8) ;120fps
@@ -283,33 +282,43 @@
   )
 )
 
-(define (check-point-col p obj-lst)
+(define (get-point-cols p el lst)
   (cond
-    [(empty? obj-lst) '()]
-    [(check-hover p (first obj-lst))
-      (when (block? (first obj-lst))
-        (block-collide (first obj-lst)))
-      (cons p (check-point-col p (rest obj-lst)))
+    [(empty? lst) '()]
+    [(check-hover p (first lst))
+      (when (block? (first lst))
+        (block-collide el (first lst)))
+      (cons p (get-point-cols p el (rest lst)))
     ]
-    [else (check-point-col p (rest obj-lst))]
-  )
-)
-(define (check-points-cols p-lst obj-lst)
-  (cond
-    [(empty? p-lst) (posn 0 0)]
-    [else (posn-sum 
-      (posn-sum-lst (check-point-col (first p-lst) obj-lst))
-      (check-points-cols (rest p-lst) obj-lst))]
+    [else (get-point-cols p el (rest lst))]
   )
 )
 
-(define (check-ball-points b obj-lst n [offset 0])
+(define (point-cols p el)
+  (if (obj-list? el)
+    (get-point-cols p el (obj-list-lst el))
+    (if (check-hover p el)
+      (cons p '()) '()
+    )
+  )
+)
+
+(define (get-points-cols p-lst el)
+  (cond
+    [(empty? p-lst) (posn 0 0)]
+    [else (posn-sum 
+      (posn-sum-lst (point-cols (first p-lst) el))
+      (get-points-cols (rest p-lst) el))]
+  )
+)
+
+(define (get-ball-cols b el points-num [offset 0])
   (unless (false? b)
-    (let* ([angl (/ 360 n)]
+    (let* ([angl (/ 360 points-num)]
             [radius (/ (posn-x (obj-size b)) 2)]
             [center (posn-add-val (obj-position b) radius)]
-            [points (get-ball-points n angl radius center offset)]
-            [res (check-points-cols points obj-lst)])
+            [points (get-ball-points points-num angl radius center offset)]
+            [res (get-points-cols points el)])
 
       (if (equal? res (posn 0 0)) (posn 0 0)
         (calc-new-direction (ball-direction b) 
@@ -319,11 +328,12 @@
    )
 )
 
-(define (get-all-collisions b)
+(define (get-all-colls b)
   (posn-sum
-    (check-ball-points b (cons (get-element "player") '()) 1 90)
-    (check-ball-points b (obj-list-lst (get-element "blocks")) 16)
-    (check-ball-points b (obj-list-lst (get-element "walls")) 4)
+    (get-ball-cols b (get-element "player") 1 90)
+    (get-ball-cols b (get-element "blocks") 16)
+    (get-ball-cols b (get-element "enemies") 16)
+    (get-ball-cols b (get-element "walls") 4)
   )
 )
 ; change-ball-direction : b new-dir -> Void
@@ -359,7 +369,7 @@
 (define (update-ball)
     (move-ball)
     (change-ball-direction
-     (get-all-collisions (get-element "ball")))
+     (get-all-colls (get-element "ball")))
 )
 
 ;;  ---------- BALL END ----------
@@ -389,12 +399,12 @@
 ;; interpretation: a prefab struct representing block
 (struct block entity (hp))
 
-; *blocks is an initial List<Entity>
+; *blocks is an initial List<block>
 (define *blocks (obj-list "blocks" (list 
   (block "block0" (posn 320 272) 
-    (posn PIXEL PIXEL) brush-button "rect" 2) 
+    (posn PIXEL PIXEL) brush-block1 "rect" 2) 
   (block "block1" (posn 304 288) 
-    (posn PIXEL PIXEL) brush-button "rect" 2) 
+    (posn PIXEL PIXEL) brush-block1 "rect" 2) 
   )
 ))
 
@@ -442,8 +452,8 @@
 )
 
 
-(define (block-collide blk)
-  (let ([lst (get-element "blocks")])
+(define (block-collide lst blk)
+  ;(let ([lst (get-element "blocks")])
     (if (<= (block-hp blk) 1)
       (remove-sub-element (item-id blk) lst)
       (let ([new-hp (- (block-hp blk) 1)])
@@ -454,15 +464,34 @@
         ) lst)
       )
     )
-  )
 )
 
 ;;  ---------- BLOCKS END ----------
 
+;;  ---------- ENEMIES ----------
+
+;; Data type
+;; enemy is a block
+;; where hp is a Number
+;; interpretation: a prefab struct representing block
+
+; *enemies is an initial List<Entity>
+(define *enemies (obj-list "enemies" (list 
+  (block "enemy0" (posn (- (/ WIDTH 2) (/ PIXEL 2)) (/ HEIGHT 16)) 
+    (posn PIXEL PIXEL) brush-ball "round-rect" 1)
+  (block "enemy1" (posn (- (* WIDTH 0.25) PIXEL) (/ HEIGHT 16)) 
+    (posn PIXEL PIXEL) brush-ball "round-rect" 1)
+  (block "enemy2" (posn (* WIDTH 0.75) (/ HEIGHT 16)) 
+    (posn PIXEL PIXEL) brush-ball "round-rect" 1)
+  )
+))
+
+;;  ---------- ENEMIES END ----------
+
 ; draw-rectangle : dc, o -> Void
 ; draw o - object rectangle form on canvas
-; header: (define (draw-rectangle dc b)
-; template: (define (draw-rectangle dc b) (send dc draw-rectangle ... o ...))
+; header: (define (draw-rectangle dc o)
+; template: (define (draw-rectangle dc o) (send dc draw-rectangle ... o ...))
 (define (draw-rectangle dc o)
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
@@ -478,8 +507,8 @@
 
 ; draw-rounded-rectangle : dc, o -> Void
 ; draw o - object rounded rectangle form on canvas
-; header: (define (draw-rounded-rectangle dc b)
-; template: (define (draw-rounded-rectangle dc b) (send dc draw-rounded-rectangle ... o ...))
+; header: (define (draw-rounded-rectangle dc o)
+; template: (define (draw-rounded-rectangle dc o) (send dc draw-rounded-rectangle ... o ...))
 (define (draw-rounded-rectangle dc o)
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
@@ -497,8 +526,8 @@
 
 ; draw-circle : dc, o -> Void
 ; draw o - object circle form on canvas
-; header: (define (draw-circle dc b)
-; template: (define (draw-circle dc b) (send dc draw-ellipse ... o ...))
+; header: (define (draw-circle dc o)
+; template: (define (draw-circle dc o) (send dc draw-ellipse ... o ...))
 (define (draw-circle dc o)
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
@@ -564,7 +593,7 @@
 ; (struct state (elements buttons titles))
 
 (define menu-state (state '() (list play-button exit-button)))
-(define game-state (state (list *player *ball *blocks *walls) 
+(define game-state (state (list *player *ball *blocks *walls *enemies) 
                           (list pause-game-button exit-game-button)))
 
 ;; Data type
@@ -748,7 +777,7 @@
     )
 
     (define/public (init-game)
-      (set-element (generate-blocks 100))
+      (set-element (generate-blocks 1))
       (play-game)
     )
 
@@ -832,6 +861,7 @@
         (send dc clear)
 
         (send dc set-background background-color)
+        (send dc set-smoothing 'smoothed)
 
         ;; draw
 
