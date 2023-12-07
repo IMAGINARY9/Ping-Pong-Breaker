@@ -79,12 +79,6 @@
   )
 )
 
-(define (rand-pos-x) (* (random PIXEL (/ WIDTH PIXEL)) PIXEL))
-(define (rand-pos-y) (* (random PIXEL (/ HEIGHT PIXEL)) PIXEL))
-(define (rand-posn) (posn (rand-pos-x) (rand-pos-y)))
-
-(define (rand-posn-min-max a b) (posn (random a b) (random a b)))
-
 ; border is a posn
 (define BLOCKS-BORDER-LU (posn 1 (/ (/ HEIGHT PIXEL) 8)))
 (define BLOCKS-BORDER-RD (posn (- (/ WIDTH PIXEL) 1) (/ (/ HEIGHT PIXEL) 2)))
@@ -223,7 +217,7 @@
 ;; player is an initial manipulable entity, your actor
 (define *player (entity "player" 
   (posn (- (/ WIDTH 2) (* PIXEL 2)) (- HEIGHT (* PIXEL 4))) 
-  (posn (* PIXEL 4) PIXEL) brush-player "rect"))
+  (posn (* PIXEL 4) PIXEL) brush-player "round-rect"))
 
 ; move-player : Number -> Void
 ; move player on by x coord
@@ -465,7 +459,7 @@
 
 ;;  ---------- BLOCKS END ----------
 
-; draw-rectangle : dc, b -> Void
+; draw-rectangle : dc, o -> Void
 ; draw o - object rectangle form on canvas
 ; header: (define (draw-rectangle dc b)
 ; template: (define (draw-rectangle dc b) (send dc draw-rectangle ... o ...))
@@ -482,7 +476,26 @@
         (posn-y sz))
 ))
 
-; draw-circle : dc, b -> Void
+; draw-rounded-rectangle : dc, o -> Void
+; draw o - object rounded rectangle form on canvas
+; header: (define (draw-rounded-rectangle dc b)
+; template: (define (draw-rounded-rectangle dc b) (send dc draw-rounded-rectangle ... o ...))
+(define (draw-rounded-rectangle dc o)
+    (let* ([pos (obj-position o)]
+            [sz (obj-size o)])
+                
+      (send dc set-brush (obj-brush o))
+
+      (send dc draw-rounded-rectangle
+        (posn-x pos)
+        (posn-y pos)
+        (posn-x sz)
+        (posn-y sz)
+        5
+        )
+))
+
+; draw-circle : dc, o -> Void
 ; draw o - object circle form on canvas
 ; header: (define (draw-circle dc b)
 ; template: (define (draw-circle dc b) (send dc draw-ellipse ... o ...))
@@ -508,6 +521,8 @@
   (cond
     [(eq? (entity-form el) "rect")
         (draw-rectangle dc el)]
+    [(eq? (entity-form el) "round-rect")
+        (draw-rounded-rectangle dc el)]
     [(eq? (entity-form el) "circle")
         (draw-circle dc el)]
     [else (displayln `(,(item-id el) ,(entity-form el)))]
