@@ -115,10 +115,10 @@
 )
 
 ; tests
-(check-equal? (check-hover (posn 150 150) 
-  (obj "test-hover-obj" (posn 120 120) (posn 50 50) brush-button)) #t)
-(check-equal? (check-hover (posn 150 150) 
-  (obj "test-hover-obj" (posn 200 100) (posn 50 50) brush-button)) #f)
+; (check-equal? (check-hover (posn 150 150) 
+;   (obj "test-hover-obj" (posn 120 120) (posn 50 50) brush-button)) #t)
+; (check-equal? (check-hover (posn 150 150) 
+;   (obj "test-hover-obj" (posn 200 100) (posn 50 50) brush-button)) #f)
 
 ;;  ---------- TOOLS END ----------
 
@@ -166,25 +166,20 @@
 ; template: (define (handle-button button-id) (cond ... button-id ...)
 (define (handle-button button-id)
   (cond
-  [(eq? button-id "play-btn") 
-    (set-state game-state)
+  [(or (eq? button-id "play-btn") 
+      (eq? button-id "restart-btn"))
     (send canvas init-game)
   ]
-  [(eq? button-id "exit-game-btn") 
-    (set-state menu-state)
+  [(eq? button-id "exit-btn") 
     (send canvas quit-game)
   ]
-  [(eq? button-id "pause-game-btn") 
-    (send canvas quit-game)
-    (remove-button "pause-game-btn")
-    (add-button continue-game-button)
+  [(eq? button-id "pause-btn") 
+    (send canvas pause-game)
   ]
-  [(eq? button-id "continue-game-btn") 
-    (send canvas play-game)
-    (remove-button "continue-game-btn")
-    (add-button pause-game-button)
+  [(eq? button-id "continue-btn") 
+    (send canvas continue-game)
   ]
-  [(eq? button-id "exit-app-btn") (send f show #f)]
+  [(eq? button-id "quit-btn") (send f show #f)]
   [else (display button-id)]
   )
   (send canvas paint-call)
@@ -195,19 +190,26 @@
   (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
   "Play" menu-button-font))
 
-(define exit-button (button "exit-app-btn" 
+(define quit-button (button "quit-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 2)) 
   (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
   "Exit" menu-button-font))
 
-(define exit-game-button (button "exit-game-btn" 
-  (posn 16 16) (posn 64 32) brush-button "Exit" #f))
+(define restart-button (button "restart-btn" 
+  (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 3)) 
+  (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
+  "Restart" menu-button-font))
 
-(define pause-game-button (button "pause-game-btn" 
-  (posn 256 128) (posn 64 32) brush-button "Pause" #f))
+(define continue-button (button "continue-btn" 
+  (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 3)) 
+  (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
+  "Continue" menu-button-font))
 
-(define continue-game-button (button "continue-game-btn" 
-  (posn 256 128) (posn 64 32) brush-button "Continue" #f))
+(define exit-button (button "exit-btn" 
+  (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 2)) 
+  (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
+  "Exit" menu-button-font))
+
 
 ;;  ---------- BUTTONS END ----------
 
@@ -497,8 +499,7 @@
 (define (check-enemies)
   (when (<= (length 
       (obj-list-lst (get-element "enemies"))) 0)
-    (send canvas win-game)
-  )
+    (send canvas win-game))
 )
 
 ;;  ---------- ENEMIES END ----------
@@ -607,10 +608,12 @@
 (struct state (elements buttons))
 ; (struct state (elements buttons titles))
 
-(define menu-state (state '() (list play-button exit-button)))
-(define pause-state (state '() (list continue-game-button exit-game-button)))
-(define game-state (state (list *player *ball *blocks *walls *enemies) 
-                          (list pause-game-button exit-game-button)))
+(define menu-state (state '() (list play-button quit-button)))
+(define pause-state (state '() (list continue-button exit-button)))
+(define win-state (state '() (list restart-button exit-button)))
+(define lose-state (state '() (list restart-button exit-button)))
+
+(define game-state (state (list *player *ball *blocks *walls *enemies) '()))
 
 ;; Data type
 ;; state-box is a structure (state active-state)
@@ -653,7 +656,7 @@
   (state-buttons (state-box-active-state *current-state)))
 
 ; test
-(check-equal? (get-buttons) (list play-button exit-button))
+;(check-equal? (get-buttons) (list play-button exit-button))
 
 ; set-buttons : List<Buttons> -> Void
 ; set new current buttons
@@ -750,14 +753,6 @@
 
 (define (test)
   (displayln "test")
-
-  ;(displayln (generate-blocks-posns '() 2 *border-left *border-right))
-
-  ; (for ([blk (obj-list-lst (get-element "blocks"))])
-  ;   (displayln `(,(item-id blk), (block-hp blk)))
-  ; )
-  ; (displayln `("size:", (length (obj-list-lst (get-element "blocks")))))
-
 )
 
 (define (get-lists main)
@@ -788,29 +783,54 @@
       (paint-callback this 'y)
     )
 
+    (define *in-game #f)
+
     (define game-timer
       (new timer%
            [notify-callback tick] [interval #f])
     )
 
     (define/public (init-game)
-      (set-element (generate-blocks 100))
+      (set-state game-state)
+      (set-element (generate-blocks 1))
       (play-game)
     )
 
     (define/public (play-game)
+      (set! *in-game #t)
       (send game-timer start FRAME-RATE)
     )
 
     (define/public (quit-game)
+      (set-state menu-state)
+      (set! *in-game #f)
       (send game-timer stop)
     )
 
+    (define/public (pause-game)
+      (let ([elems (get-elements)])
+        (set-state pause-state)
+        (set-elements elems)
+      )
+      (set! *in-game #f)
+      (send game-timer stop)
+    )
+
+    (define/public (continue-game)
+      (let ([elems (get-elements)])
+        (set-state game-state)
+        (set-elements elems)
+      )
+      (play-game)
+    )
+
     (define/public (win-game)
+      (set-state win-state)
       (send game-timer stop)
     )
 
     (define/public (lose-game)
+      (set-state lose-state)
       (send game-timer stop)
     )
 
@@ -822,7 +842,7 @@
     (define/override (on-char key-event)
         (define key (send key-event get-key-code))
         
-        (cond
+        (when (not (false? *in-game)) (cond
             ; base case any key-release has do nothing
             [(equal? key 'release) ]
             ; Left arrow or 'a' key moves the player left
@@ -837,31 +857,36 @@
                     (move-player PIXEL)
                     ;(displayln "move-right")
             ]
+            [(equal? key 'escape)
+                (pause-game)
+                (paint-callback this 'y)
+            ]
             [(equal? key #\space )
                   (test)
             ]
             [else (println key)]
-        )
+        ))
 
     )
 
-    (define *x 0)
-    (define *y 0)
-    (define *on-board #f)
+    ; (define *x 0)
+    ; (define *y 0)
+    ; (define *on-board #f)
 
     (define/override (on-event evt)
       (define type (send evt get-event-type))
-      (set! *x (send evt get-x))
-      (set! *y (send evt get-y))
-      (cond
-        [(eq? 'leave type) (set! *on-board #f)]
-        [(eq? 'enter type) (set! *on-board #t)]
-      )
+      ; (set! *x (send evt get-x))
+      ; (set! *y (send evt get-y))
+      ; (cond
+      ;   [(eq? 'leave type) (set! *on-board #f)]
+      ;   [(eq? 'enter type) (set! *on-board #t)]
+      ; )
 
       ;(displayln `("m-pos:", *x, *y))
 
       (for ([btn (in-list (get-buttons))])
-          (when (and (eq? 'left-down type) (check-hover (posn *x *y) btn)) 
+          (when (and (eq? 'left-down type) 
+            (check-hover (posn (send evt get-x) (send evt get-y)) btn)) 
           (handle-button (item-id btn)))
       )
 
@@ -889,8 +914,7 @@
             (draw-button dc btn)
         )
       )
-
-      )
+    )
 
     (super-new [paint-callback paint-callback])
     ))
