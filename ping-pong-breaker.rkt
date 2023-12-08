@@ -15,6 +15,9 @@
 (define FRAME-RATE 4) ;250fps
 ;(define FRAME-RATE 1) ;1000fps
 
+(define menu-button-font (make-object font% 28 'swiss))
+(define default-font (make-object font% 12 'default))
+
 ;(define solid-color  (new brush% [color "colorname"]))
 (define brush-button  (new brush% [color (make-object color% 250 210 205)]))
 
@@ -26,7 +29,7 @@
 (define brush-block3 (new brush% [color (make-object color% 245 125 130)]))
 (define background-color (make-object color% 160 85 120))
 
-(define default (new brush% [color "white"][style 'opaque]))
+(define default-brush (new brush% [color "white"][style 'opaque]))
 
 ;;  ---------- DEFINITIONS END ----------
 
@@ -125,7 +128,7 @@
 ;; button is a structure inherited from an obj (button id position size text)
 ;; where text is a String
 ;; interpretation: a prefab struct representing button in application
-(struct button obj (text))
+(struct button obj (text font))
 
 ; draw-button : dc, b -> Void
 ; draw button on canvas
@@ -136,6 +139,9 @@
             [sz (obj-size b)])
 
       (send dc set-brush (obj-brush b))
+      
+      (when (button-font b)
+        (send dc set-font (button-font b)))
                 
       (send dc draw-rectangle
         (posn-x pos)
@@ -185,21 +191,23 @@
 )
 
 (define play-button (button "play-btn" 
-  (posn (- (/ WIDTH 2)(/ WIDTH 4 2)) (/ HEIGHT 3)) 
-  (posn (/ WIDTH 4) (/ HEIGHT 20)) brush-button "Play"))
+  (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 3)) 
+  (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
+  "Play" menu-button-font))
 
 (define exit-button (button "exit-app-btn" 
-  (posn (- (/ WIDTH 2)(/ WIDTH 4 2)) (/ HEIGHT 2)) 
-  (posn (/ WIDTH 4) (/ HEIGHT 20)) brush-button "Exit"))
+  (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 2)) 
+  (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
+  "Exit" menu-button-font))
 
 (define exit-game-button (button "exit-game-btn" 
-  (posn 16 16) (posn 64 32) brush-button "Exit"))
+  (posn 16 16) (posn 64 32) brush-button "Exit" #f))
 
 (define pause-game-button (button "pause-game-btn" 
-  (posn 256 128) (posn 64 32) brush-button "Pause"))
+  (posn 256 128) (posn 64 32) brush-button "Pause" #f))
 
 (define continue-game-button (button "continue-game-btn" 
-  (posn 256 128) (posn 64 32) brush-button "Continue"))
+  (posn 256 128) (posn 64 32) brush-button "Continue" #f))
 
 ;;  ---------- BUTTONS END ----------
 
@@ -429,7 +437,7 @@
     [(= hp 1) brush-block1]
     [(= hp 2) brush-block2]
     [(= hp 3) brush-block3]
-    [else default]
+    [else default-brush]
   )
 )
 
@@ -485,6 +493,13 @@
     (posn PIXEL PIXEL) brush-ball "round-rect" 1)
   )
 ))
+
+(define (check-enemies)
+  (when (<= (length 
+      (obj-list-lst (get-element "enemies"))) 0)
+    (send canvas win-game)
+  )
+)
 
 ;;  ---------- ENEMIES END ----------
 
@@ -593,6 +608,7 @@
 ; (struct state (elements buttons titles))
 
 (define menu-state (state '() (list play-button exit-button)))
+(define pause-state (state '() (list continue-game-button exit-game-button)))
 (define game-state (state (list *player *ball *blocks *walls *enemies) 
                           (list pause-game-button exit-game-button)))
 
@@ -768,6 +784,7 @@
     (define (tick)
       (update-ball)
       (update-ball)
+      (check-enemies)
       (paint-callback this 'y)
     )
 
@@ -777,7 +794,7 @@
     )
 
     (define/public (init-game)
-      (set-element (generate-blocks 1))
+      (set-element (generate-blocks 100))
       (play-game)
     )
 
@@ -826,8 +843,6 @@
             [else (println key)]
         )
 
-        ; Display of any changes
-        ;(paint-callback this 'y)
     )
 
     (define *x 0)
@@ -862,6 +877,7 @@
 
         (send dc set-background background-color)
         (send dc set-smoothing 'smoothed)
+        (send dc set-font default-font)
 
         ;; draw
 
