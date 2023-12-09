@@ -24,6 +24,7 @@
 
 (define brush-ball (new brush% [color (make-object color% 60 60 125)]))
 (define brush-player (new brush% [color (make-object color% 250 210 205)]))
+(define brush-destroyer (new brush% [color (make-object color% 250 210 205 0.25)]))
 (define brush-wall (new brush% [color (make-object color% 240 140 135)]))
 (define brush-block1 (new brush% [color (make-object color% 250 210 170)]))
 (define brush-block2 (new brush% [color (make-object color% 250 160 135)]))
@@ -261,6 +262,26 @@
 
 ;;  ---------- PLAYER END ----------
 
+;;  ---------- DESTROYER ----------
+
+;; destroyer is an initial entity, when ball touch it game lose
+(define *destroyer (entity "destroyer" 
+  (posn PIXEL (- HEIGHT (* PIXEL 4))) 
+  (posn (- WIDTH (* PIXEL 2)) PIXEL) brush-destroyer "rect"))
+
+(define (check-destroyer)
+  (when (and 
+    (not (equal? (get-ball-cols (get-element "ball") 
+      (get-element "destroyer") 1 90) (posn 0 0)))
+    (equal? (get-ball-cols (get-element "ball") 
+      (get-element "player") 1 90) (posn 0 0)))
+
+    (send canvas lose-game)
+  )
+)
+
+;;  ---------- DESTROYER END ----------
+
 ;;  ---------- BALL ----------
 
 ;; Data type
@@ -399,8 +420,8 @@
     brush-wall "rect")
   (entity "wall2" (posn 0 0) (posn WIDTH PIXEL) 
     brush-wall "rect")
-  (entity "wall3" (posn 0 (- HEIGHT PIXEL PIXEL)) (posn WIDTH PIXEL) 
-    brush-wall "rect")
+  ; (entity "wall3" (posn 0 (- HEIGHT PIXEL PIXEL)) (posn WIDTH PIXEL) 
+  ;   brush-wall "rect")
     )
 ))
 
@@ -676,7 +697,7 @@
   (list win-title)))
 (define lose-state (state '() (list restart-button exit-button) 
   (list lose-title)))
-(define game-state (state (list *player *ball *blocks *walls *enemies) '() '()))
+(define game-state (state (list *player *destroyer *ball *blocks *walls *enemies) '() '()))
 
 ;; Data type
 ;; state-box is a structure (state active-state)
@@ -853,6 +874,7 @@
       (update-ball)
       (update-ball)
       (check-enemies)
+      (check-destroyer)
       (paint-callback this 'y)
     )
 
@@ -865,19 +887,23 @@
 
     (define/public (init-game)
       (set-state game-state)
-      (set-element (generate-blocks 1))
+      (set-element (generate-blocks 100))
       (play-game)
     )
 
-    (define/public (play-game)
+    (define/private (play-game)
       (set! *in-game #t)
       (send game-timer start FRAME-RATE)
     )
+    (define/private (stop-game)
+      (set! *in-game #f)
+      (send game-timer stop)
+    )
+  
 
     (define/public (quit-game)
       (set-state menu-state)
-      (set! *in-game #f)
-      (send game-timer stop)
+      (stop-game)
     )
 
     (define/public (pause-game)
@@ -885,8 +911,7 @@
         (set-state pause-state)
         (set-elements elems)
       )
-      (set! *in-game #f)
-      (send game-timer stop)
+      (stop-game)
     )
 
     (define/public (continue-game)
@@ -899,12 +924,12 @@
 
     (define/public (win-game)
       (set-state win-state)
-      (send game-timer stop)
+      (stop-game)
     )
 
     (define/public (lose-game)
       (set-state lose-state)
-      (send game-timer stop)
+      (stop-game)
     )
 
     (define/public (paint-call)
