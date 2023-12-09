@@ -15,6 +15,7 @@
 (define FRAME-RATE 4) ;250fps
 ;(define FRAME-RATE 1) ;1000fps
 
+(define menu-title-font (make-object font% 64 'swiss))
 (define menu-button-font (make-object font% 28 'swiss))
 (define default-font (make-object font% 12 'default))
 
@@ -96,7 +97,7 @@
 ;; interpretation: a prefab struct representing object in application
 
 (struct item (id) #:transparent)
-(struct obj item (position size brush) #:transparent)
+(struct obj item (position size) #:transparent)
 (struct obj-list item (lst) #:transparent)
 
 ; check-hover : posn, obj -> Boolean
@@ -114,6 +115,8 @@
   )
 )
 
+(struct colorful obj (brush) #:transparent)
+
 ; tests
 ; (check-equal? (check-hover (posn 150 150) 
 ;   (obj "test-hover-obj" (posn 120 120) (posn 50 50) brush-button)) #t)
@@ -128,7 +131,7 @@
 ;; button is a structure inherited from an obj (button id position size text)
 ;; where text is a String
 ;; interpretation: a prefab struct representing button in application
-(struct button obj (text font))
+(struct button colorful (text font))
 
 ; draw-button : dc, b -> Void
 ; draw button on canvas
@@ -138,10 +141,12 @@
   (let* ([pos (obj-position b)]
             [sz (obj-size b)])
 
-      (send dc set-brush (obj-brush b))
+      (send dc set-brush (colorful-brush b))
       
-      (when (button-font b)
-        (send dc set-font (button-font b)))
+      (if (button-font b)
+        (send dc set-font (button-font b))
+        (send dc set-font default-font)
+      )
                 
       (send dc draw-rectangle
         (posn-x pos)
@@ -219,7 +224,7 @@
 ;; entity is a structure inherited from an obj (entity id position size form)
 ;; where form is a String
 ;; interpretation: a prefab struct representing game entity that can be drawn by form
-(struct entity obj (form))
+(struct entity colorful (form))
 
 ;;  ---------- PLAYER ----------
 
@@ -470,7 +475,7 @@
         (set-sub-element 
         (struct-copy block blk
           [hp new-hp]
-          [brush #:parent obj (get-block-brush new-hp)]
+          [brush #:parent colorful (get-block-brush new-hp)]
         ) lst)
       )
     )
@@ -512,7 +517,7 @@
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
                 
-      (send dc set-brush (obj-brush o))
+      (send dc set-brush (colorful-brush o))
 
       (send dc draw-rectangle
         (posn-x pos)
@@ -529,7 +534,7 @@
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
                 
-      (send dc set-brush (obj-brush o))
+      (send dc set-brush (colorful-brush o))
 
       (send dc draw-rounded-rectangle
         (posn-x pos)
@@ -537,7 +542,7 @@
         (posn-x sz)
         (posn-y sz)
         5
-        )
+      )
 ))
 
 ; draw-circle : dc, o -> Void
@@ -548,7 +553,7 @@
     (let* ([pos (obj-position o)]
             [sz (obj-size o)])
 
-      (send dc set-brush (obj-brush o))
+      (send dc set-brush (colorful-brush o))
                 
       (send dc draw-ellipse
         (posn-x pos)
@@ -590,7 +595,63 @@
 
 ;;  ---------- TITLES END ----------
 
-; (struct title (x y))
+;; Data type
+;; button is a structure inherited from an obj (button id position size text)
+;; where text is a String
+;; interpretation: a prefab struct representing button in application
+(struct title obj (text font))
+
+(define menu-up-title 
+  (title "menu-up-ttl" 
+    (posn (/ WIDTH 2) (/ HEIGHT 5)) 
+    (posn 0 0) "Ping-Pong" menu-title-font))
+
+(define menu-down-title1 
+  (title "menu-down-ttl" 
+    (posn (/ WIDTH 2) (/ HEIGHT 1.4)) 
+    (posn 0 0) "B   E   K   R" menu-title-font))
+
+(define menu-down-title2
+  (title "menu-down-ttl" 
+    (posn (/ WIDTH 2) (/ HEIGHT 1.45)) 
+    (posn 0 0) "   R   A   E   " menu-title-font))
+
+(define pause-title 
+  (title "pause-ttl" 
+    (posn (/ WIDTH 2) (/ HEIGHT 5)) 
+    (posn 0 0) "Pause" menu-title-font))
+
+(define win-title 
+  (title "win-ttl" 
+    (posn (/ WIDTH 2) (/ HEIGHT 5)) 
+    (posn 0 0) "You Win!!!" menu-title-font))
+
+(define lose-title 
+  (title "lose-ttl" 
+    (posn (/ WIDTH 2) (/ HEIGHT 5)) 
+    (posn 0 0) "You Lose :(" menu-title-font))
+
+; draw-title : dc, t -> Void
+; draw title on canvas
+; header: (define (draw-title dc t)
+; template: (define (draw-title dc t) (send dc ... t ...))
+(define (draw-title dc t)
+  (let* ([pos (obj-position t)])
+      
+      (if (title-font t)
+        (send dc set-font (title-font t))
+        (send dc set-font default-font)
+      )
+
+  (define-values (text-w text-h d a)
+    (send dc get-text-extent (title-text t)))
+  (send dc draw-text 
+    (title-text t) 
+    (+ (posn-x pos) (/ (- text-w) 2))
+    (+ (posn-y pos) (/ (- text-h) 2))
+  )
+)
+)
 
 ;;  ---------- TITLES END ----------
 
@@ -603,17 +664,19 @@
 
 ;; Data type
 ;; state is a structure (state elements buttons)
-;; where elements, buttons is a List<obj>
+;; where elements, buttons, titles is a List<obj>
 ;; interpretation: a prefab struct representing world-state  
-(struct state (elements buttons))
-; (struct state (elements buttons titles))
+(struct state (elements buttons titles))
 
-(define menu-state (state '() (list play-button quit-button)))
-(define pause-state (state '() (list continue-button exit-button)))
-(define win-state (state '() (list restart-button exit-button)))
-(define lose-state (state '() (list restart-button exit-button)))
-
-(define game-state (state (list *player *ball *blocks *walls *enemies) '()))
+(define menu-state (state '() (list play-button quit-button) 
+  (list menu-up-title menu-down-title1 menu-down-title2)))
+(define pause-state (state '() (list continue-button exit-button) 
+  (list pause-title)))
+(define win-state (state '() (list restart-button exit-button)
+  (list win-title)))
+(define lose-state (state '() (list restart-button exit-button) 
+  (list lose-title)))
+(define game-state (state (list *player *ball *blocks *walls *enemies) '() '()))
 
 ;; Data type
 ;; state-box is a structure (state active-state)
@@ -646,7 +709,7 @@
 ; header: (define (set-elements elems)
 ; template: (define (set-elements elems) (...)
 (define (set-elements elems)
-  (set-state (state elems (get-buttons))))
+  (set-state (state elems (get-buttons) (get-titles))))
 
 ; get-buttons : -> List<Buttons>
 ; get list of current buttons
@@ -663,7 +726,24 @@
 ; header: (define (set-buttons buttons)
 ; template: (define (set-buttons buttons) (...)
 (define (set-buttons buttons)
-  (set-state (state (get-elements) buttons)))
+  (set-state (state (get-elements) buttons (get-titles))))
+
+; get-titles : -> List<titles>
+; get list of current titles
+; header: (define (get-titles)
+; template: (define (get-titles) (...)
+(define (get-titles)
+  (state-titles (state-box-active-state *current-state)))
+
+; test
+;(check-equal? (get-titles) (list play-button exit-button))
+
+; set-titles : List<titles> -> Void
+; set new current titles
+; header: (define (set-titles titles)
+; template: (define (set-titles titles) (...)
+(define (set-titles titles)
+  (set-state (state (get-elements) (get-buttons) titles)))
 
 ; get-element : String -> obj
 ; get element by id
@@ -746,19 +826,12 @@
 )
 
 (define (set-sub-element sub-el el-lst)
-  ;(displayln `("size 1:", (length (obj-list-lst (get-element "blocks")))))
   (remove-sub-element (item-id sub-el) el-lst)
   (add-sub-element sub-el (get-element "blocks"))
 )
 
 (define (test)
   (displayln "test")
-)
-
-(define (get-lists main)
-  (filter (lambda (lst)
-    (and (not (null? lst))(list? lst))) 
-      main)
 )
 
 ;;  ---------- STATES END ----------
@@ -902,16 +975,19 @@
 
         (send dc set-background background-color)
         (send dc set-smoothing 'smoothed)
-        (send dc set-font default-font)
 
         ;; draw
 
-        (for ([e (in-list (get-elements))])
-            (draw-element dc e)
+        (for ([el (in-list (get-elements))])
+            (draw-element dc el)
         )
 
         (for ([btn (in-list (get-buttons))])
             (draw-button dc btn)
+        )
+
+        (for ([ttl (in-list (get-titles))])
+            (draw-title dc ttl)
         )
       )
     )
