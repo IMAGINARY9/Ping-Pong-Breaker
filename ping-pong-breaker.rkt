@@ -1,27 +1,30 @@
 #lang racket
 (require racket/gui)
 (require rackunit)
+;(require test-engine/racket-tests)
 
 ;;  ---------- DEFINITIONS ----------
 
 ; Screen size constants to create gameboard
-(define PIXEL 16)
-
 (define WIDTH 512)
 (define HEIGHT 768)
 
+; Size of the game cell
+(define PIXEL 16)
+
+; Game updating frame rate
 ;(define FRAME-RATE 17) ;60fps
 ;(define FRAME-RATE 8) ;120fps
 (define FRAME-RATE 4) ;250fps
 ;(define FRAME-RATE 1) ;1000fps
 
-(define menu-title-font (make-object font% 64 'swiss))
-(define menu-button-font (make-object font% 28 'swiss))
-(define default-font (make-object font% 12 'default))
+; Fonts
+(define font-title (make-object font% 64 'swiss))
+(define font-button (make-object font% 28 'swiss))
+(define font-default (make-object font% 12 'default))
 
-;(define solid-color  (new brush% [color "colorname"]))
+; Brushes
 (define brush-button  (new brush% [color (make-object color% 250 210 205)]))
-
 (define brush-ball (new brush% [color (make-object color% 60 60 125)]))
 (define brush-player (new brush% [color (make-object color% 250 210 205)]))
 (define brush-destroyer (new brush% [color (make-object color% 250 210 205 0.25)]))
@@ -29,107 +32,237 @@
 (define brush-block1 (new brush% [color (make-object color% 250 210 170)]))
 (define brush-block2 (new brush% [color (make-object color% 250 160 135)]))
 (define brush-block3 (new brush% [color (make-object color% 245 125 130)]))
+(define brush-default (new brush% [color "white"][style 'opaque]))
+
+; Color for background
 (define background-color (make-object color% 160 85 120))
 
-(define default-brush (new brush% [color "white"][style 'opaque]))
 
 ;;  ---------- DEFINITIONS END ----------
 
 ;;  ---------- TOOLS ----------
 
 ;; Data type
-;; posn is a structure (posn x y)  
+;; posn is a structure (posn Number Number)  
 ;; interpretation: a prefab struct representing a point in 2d space
 (struct posn (x y) #:transparent)
 
+; posn-add : posn posn -> posn
+; add two positions together
+; header: (define (posn-add posn1 posn2) posn)
+
+;; Template:
+; (define (posn-add posn1 posn2)
+;   (posn ... (... posn1) ... (... posn2)))
+
+;; Code
 (define/match (posn-add posn1 posn2)
   [((posn x1 y1) (posn x2 y2))
     (posn (+ x1 x2) (+ y1 y2))]
 )
-(define (posn-sum posn1 . other)
-  (foldl posn-add posn1 other)
+
+(check-equal? (posn-add (posn 3 4) (posn 1 2)) (posn 4 6))
+(check-equal? (posn-add (posn -1 0) (posn 1 -2)) (posn 0 -2))
+
+; posn-sum : posn ... posn -> posn
+; add two and more positions together
+; header: (define (posn-sum posn . other) posn)
+
+;; Template:
+; (define (posn-sum posn . other)
+;   (foldl ... (... posn1) ... (... other)))
+
+;; Code
+(define (posn-sum p . other)
+  (foldl posn-add p other)
 )
+
+(check-equal? (posn-sum (posn 3 4) (posn 1 2) (posn 2 2)) (posn 6 8))
+(check-equal? (posn-sum (posn -1 0) (posn 1 1) (posn 3 3)) (posn 3 4))
+
+; posn-sum-lst : List<posn> -> posn
+; add all posns in List together
+; header: (define (posn-sum-lst posn-lst) posn)
+
+;; Template:
+; (define (posn-sum-lst posn-lst)
+;   (foldl ... (posn 0 0) ... (... posn-lst)))
+
+;; Code
 (define (posn-sum-lst posn-lst)
   (foldl posn-add (posn 0 0) posn-lst)
 )
-(define (posn-add-val posn1 val)
-  (posn (+ (posn-x posn1) val) 
-        (+ (posn-y posn1) val)
+
+(check-equal? (posn-sum-lst (list (posn 0 -2) (posn 1 2))) (posn 1 0))
+(check-equal? (posn-sum-lst (list (posn 3 4) (posn 1 2) (posn 2 2))) (posn 6 8))
+
+; posn-add-val : List<posn> -> posn
+; add position and value
+; header: (define (posn-add-val p val) posn)
+
+;; Template:
+; (define (posn-add-val p val)
+;   (posn ... (posn-x p) ... (posn-y p) ... (... val)))
+
+;; Code
+(define (posn-add-val p val)
+  (posn (+ (posn-x p) val) 
+        (+ (posn-y p) val)
 ))
 
+(check-equal? (posn-add-val (posn 3 4) 3) (posn 6 7))
+(check-equal? (posn-add-val (posn -1 0) 2) (posn 1 2))
+
+; posn-substract : posn posn -> posn
+; subtracts posn2 from posn1
+; header: (define (posn-substract posn1 posn2) posn)
+
+;; Template:
+; (define (posn-substract posn1 posn2)
+;   (posn ... (... posn1) ... (... posn2)))
+
+;; Code
 (define/match (posn-substract posn1 posn2)
   [((posn x1 y1) (posn x2 y2))
     (posn (- x1 x2) (- y1 y2))]
 )
 
+(check-equal? (posn-substract (posn 3 4) (posn 1 2)) (posn 2 2))
+(check-equal? (posn-substract (posn -1 0) (posn 1 -2)) (posn -2 2))
+
+; posn-multiply : posn posn -> posn
+; multiplies posn1 and posn2 together
+; header: (define (posn-multiply posn1 posn2) posn)
+
+;; Template:
+; (define (posn-multiply posn1 posn2)
+;   (posn ... (... posn1) ... (... posn2)))
+
+;; Code
 (define/match (posn-multiply posn1 posn2)
   [((posn x1 y1) (posn x2 y2))
     (posn (* x1 x2) (* y1 y2))]
 )
-(define (posn-product posn1 . other)
-  (foldl posn-multiply posn1 other)
+
+(check-equal? (posn-multiply (posn 3 4) (posn 2 2)) (posn 6 8))
+(check-equal? (posn-multiply (posn -1 0) (posn 1 -2)) (posn -1 0))
+
+; posn-product : posn ... posn -> posn
+; multiplies two or more posns together
+; header: (define (posn-product p . other) posn)
+
+;; Template:
+; (define (posn-product p . other)
+;   (foldl ... (... p) ... (... other)))
+
+;; Code
+(define (posn-product p . other)
+  (foldl posn-multiply p other)
 )
-(define (posn-multiply-val posn1 val)
-  (posn (* (posn-x posn1) val) 
-        (* (posn-y posn1) val)
+
+(check-equal? (posn-product (posn 3 4) (posn 1 2) (posn 2 2)) (posn 6 16))
+(check-equal? (posn-product (posn -1 0) (posn 1 1) (posn 3 3)) (posn -3 0))
+
+; posn-multiply-val : posn Number -> posn
+; multiplies posn by a value
+; header: (define (posn-multiply-val p val) posn)
+
+;; Template:
+; (define (posn-multiply-val p val)
+;   (posn ... (posn-x p) ... (posn-y p) ... (... val)))
+
+;; Code
+(define (posn-multiply-val p val)
+  (posn (* (posn-x p) val) 
+        (* (posn-y p) val)
 ))
 
+(check-equal? (posn-multiply-val (posn 3 4) 2) (posn 6 8))
+(check-equal? (posn-multiply-val (posn -1 0) 3) (posn -3 0))
+
+; posn-normalize : posn -> posn
+; normalizes the given posn
+; header: (define (posn-normalize p) posn)
+
+;; Template:
+; (define (posn-normalize p)
+;   (let ([l (sqrt ...)])
+;     (posn ... (/ (posn-x p) l) ... (/ (posn-y p) l))))
+
+;; Code
 (define (posn-normalize p)
   (let ([l (sqrt 
       (+ (* (posn-x p) (posn-x p))
          (* (posn-y p) (posn-y p))))])
-            
-    (posn (/(posn-x p) l)(/ (posn-y p) l))
+    (posn (/ (posn-x p) l) (/ (posn-y p) l))
   )
 )
 
-; border is a posn
+(check-equal? (posn-normalize (posn 3 4)) (posn (/ 3 5) (/ 4 5)))
+
+; Border is a posn
 (define BLOCKS-BORDER-LU (posn 1 (/ (/ HEIGHT PIXEL) 8)))
 (define BLOCKS-BORDER-RD (posn (- (/ WIDTH PIXEL) 1) (/ (/ HEIGHT PIXEL) 2)))
 
+; Max block size on game screen 
 (define MAX-BLOCKS-NUMBER 
   (* (- (posn-y BLOCKS-BORDER-RD) (posn-y BLOCKS-BORDER-LU)) 
       (- (posn-x BLOCKS-BORDER-RD) (posn-x BLOCKS-BORDER-LU)))
 ) ;30x8 ;240
 
 ;; Data type
-;; obj is a structure (obj id position size)
-;; where id is a Number, position and size is a posn
-;; interpretation: a prefab struct representing object in application
-
+;; item is a structure (item id)
+;; where id is a Number
+;; interpretation: a prefab struct representing item with some identifier
 (struct item (id) #:transparent)
-(struct obj item (position size) #:transparent)
-(struct obj-list item (lst) #:transparent)
 
-; check-hover : posn, obj -> Boolean
-; does the point overlap with the object
-; header: (define (check-hover p obj)
-; template: (define (check-hover p obj) (and ... p obj ...))
-(define (check-hover p obj)
+;; entity is a structure (entity id position size)
+;; where id is a Number, position and size is a posn
+;; interpretation: a prefab struct representing entity in application
+(struct entity item (position size) #:transparent)
+
+; check-hover : posn, entity -> Boolean
+; does the point overlap with the entity
+; header: (define (check-hover p entity)
+
+;; Template:
+; (define (check-hover p entity) 
+;   (and (>= (posn-x p) ... entity) (<= (posn-x p) ... entity)
+;         (>= (posn-y p) ... entity) (>= (posn-y p) ... entity))
+
+;; Code
+(define (check-hover p ent)
   (and 
-    (>= (posn-x p) (posn-x (obj-position obj))) 
-      (<= (posn-x p) (+ (posn-x (obj-position obj))
-         (posn-x (obj-size obj))))
-    (>= (posn-y p)(posn-y (obj-position obj))) 
-      (<= (posn-y p) (+ (posn-y (obj-position obj))
-         (posn-y (obj-size obj))))
+    (>= (posn-x p) (posn-x (entity-position ent))) 
+      (<= (posn-x p) (+ (posn-x (entity-position ent))
+         (posn-x (entity-size ent))))
+    (>= (posn-y p)(posn-y (entity-position ent))) 
+      (<= (posn-y p) (+ (posn-y (entity-position ent))
+         (posn-y (entity-size ent))))
   )
 )
 
-(struct colorful obj (brush) #:transparent)
+(check-equal? (check-hover (posn 150 150) 
+  (entity "test-hover-entity" (posn 120 120) (posn 50 50))) #t)
+(check-equal? (check-hover (posn 150 150) 
+  (entity "test-hover-entity" (posn 200 100) (posn 50 50))) #f)
 
-; tests
-; (check-equal? (check-hover (posn 150 150) 
-;   (obj "test-hover-obj" (posn 120 120) (posn 50 50) brush-button)) #t)
-; (check-equal? (check-hover (posn 150 150) 
-;   (obj "test-hover-obj" (posn 200 100) (posn 50 50) brush-button)) #f)
+;; entity-list is a structure (entity-list id List<obj>)
+;; where id is a Number, List<obj> is a list with objs
+;; interpretation: a prefab struct representing object in application
+(struct entity-list item (lst) #:transparent)
+
+;; obj is a structure (obj id position size)
+;; where id is a Number, position and size is a posn
+;; interpretation: a prefab struct representing object in application
+(struct colorful entity (brush) #:transparent)
 
 ;;  ---------- TOOLS END ----------
 
 ;;  ---------- BUTTONS ----------
 
 ;; Data type
-;; button is a structure inherited from an obj (button id position size text)
+;; button is a structure inherited from an entity (button id position size text)
 ;; where text is a String
 ;; interpretation: a prefab struct representing button in application
 (struct button colorful (text font))
@@ -139,14 +272,14 @@
 ; header: (define (draw-button dc b)
 ; template: (define (draw-button dc b) (send dc ... b ...))
 (define (draw-button dc b)
-  (let* ([pos (obj-position b)]
-            [sz (obj-size b)])
+  (let* ([pos (entity-position b)]
+            [sz (entity-size b)])
 
       (send dc set-brush (colorful-brush b))
       
       (if (button-font b)
         (send dc set-font (button-font b))
-        (send dc set-font default-font)
+        (send dc set-font font-default)
       )
                 
       (send dc draw-rectangle
@@ -161,15 +294,19 @@
     (button-text b) 
     (+ (posn-x pos) (/ (- (posn-x sz) text-w) 2))
     (+ (posn-y pos) (/ (- (posn-y sz) text-h) 2))
-    ;'grapheme
   )
-)
-)
+))
+
+; impossible to write a tests
 
 ; handle-button : button-id -> Void
 ; button handling by button id
 ; header: (define (handle-button button-id)
-; template: (define (handle-button button-id) (cond ... button-id ...)
+
+;; Template:
+; (define (handle-button button-id) (cond ... button-id ...)
+
+;; Code
 (define (handle-button button-id)
   (cond
   [(or (eq? button-id "play-btn") 
@@ -191,30 +328,32 @@
   (send canvas paint-call)
 )
 
+;(check-equal? (handle-button "play-btn") (send canvas init-game))
+
 (define play-button (button "play-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 3)) 
   (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
-  "Play" menu-button-font))
+  "Play" font-button))
 
 (define quit-button (button "quit-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 2)) 
   (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
-  "Exit" menu-button-font))
+  "Exit" font-button))
 
 (define restart-button (button "restart-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 3)) 
   (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
-  "Restart" menu-button-font))
+  "Restart" font-button))
 
 (define continue-button (button "continue-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 3)) 
   (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
-  "Continue" menu-button-font))
+  "Continue" font-button))
 
 (define exit-button (button "exit-btn" 
   (posn (- (/ WIDTH 2)(/ WIDTH 3 2)) (/ HEIGHT 2)) 
   (posn (/ WIDTH 3) (/ HEIGHT 16)) brush-button 
-  "Exit" menu-button-font))
+  "Exit" font-button))
 
 
 ;;  ---------- BUTTONS END ----------
@@ -222,53 +361,65 @@
 ;;  ---------- ENTITIES ----------
 
 ;; Data type
-;; entity is a structure inherited from an obj (entity id position size form)
+;; drawable is a structure inherited from an entity (drawable id position size form)
 ;; where form is a String
-;; interpretation: a prefab struct representing game entity that can be drawn by form
-(struct entity colorful (form))
+;; interpretation: a prefab struct representing game drawable that can be drawn by form
+(struct drawable colorful (form))
 
 ;;  ---------- PLAYER ----------
 
-;; player is an initial manipulable entity, your actor
-(define *player (entity "player" 
+;; player is an initial manipulable drawable, your actor
+(define *player (drawable "player" 
   (posn (- (/ WIDTH 2) (* PIXEL 2)) (- HEIGHT (* PIXEL 4))) 
   (posn (* PIXEL 4) PIXEL) brush-player "round-rect"))
 
 ; move-player : Number -> Void
 ; move player on by x coord
-; header: (define (move-player x)
-; template: (move-player x) (... x ...)
+; header: (define (move-player x) void)
+
+;; Template:
+; (define (move-player x) (... (get-element "player") ... x ...))
+
+;; Code
 (define (move-player x)
   (let ([pl (get-element "player")])
-  (unless (false? pl)
-
   (let ([new-pos (posn 
-        (+ (posn-x (obj-position pl)) x)
-        (posn-y (obj-position pl)))])
+        (+ (posn-x (entity-position pl)) x)
+        (posn-y (entity-position pl)))])
         
     (when (and (> (posn-x new-pos) 0) 
             (< (+ (posn-x new-pos) 
-                  (posn-x (obj-size pl))) 
+                  (posn-x (entity-size pl))) 
               WIDTH))
 
       (set-element 
-        (struct-copy entity pl
-          [position #:parent obj new-pos])
+        (struct-copy drawable pl
+          [position #:parent entity new-pos])
       )
     )
-  )
-  )
-))
+  ))
+)
+
+; later
+;(check-equal?)
 
 ;;  ---------- PLAYER END ----------
 
 ;;  ---------- DESTROYER ----------
 
-;; destroyer is an initial entity, when ball touch it game lose
-(define *destroyer (entity "destroyer" 
+;; destroyer is an initial drawable, when ball touch it game lose
+(define *destroyer (drawable "destroyer" 
   (posn PIXEL (- HEIGHT (* PIXEL 4))) 
   (posn (- WIDTH (* PIXEL 2)) PIXEL) brush-destroyer "rect"))
 
+; check-destroyer : Number -> Void
+; check lose condition when true -> lose game
+; header: (define (check-destroyer) void)
+
+;; Template:
+; (define (check-destroyer) (when ... (get-element "destroyer") ...)
+
+;; Code
 (define (check-destroyer)
   (when (and 
     (not (equal? (get-ball-cols (get-element "ball") 
@@ -285,14 +436,14 @@
 ;;  ---------- BALL ----------
 
 ;; Data type
-;; ball is a structure inherited from an entity (ball id position size form direction)
+;; ball is a structure inherited from an drawable (ball id position size form direction)
 ;; where direction is a posn
 ;; interpretation: a prefab struct representing game ball
-(struct ball entity (direction))
+(struct ball drawable (direction))
 
 ;; *ball is a initial game ball
 (define *ball (ball "ball"
-  (posn (/ WIDTH 2) (/ HEIGHT 2)) 
+  (posn (/ WIDTH 2) (/ HEIGHT 2))
   (posn PIXEL PIXEL) brush-ball
   "circle" (posn-normalize (posn 0 1))))
 
@@ -331,8 +482,8 @@
 )
 
 (define (point-cols p el)
-  (if (obj-list? el)
-    (get-point-cols p el (obj-list-lst el))
+  (if (entity-list? el)
+    (get-point-cols p el (entity-list-lst el))
     (if (check-hover p el)
       (cons p '()) '()
     )
@@ -351,8 +502,8 @@
 (define (get-ball-cols b el points-num [offset 0])
   (unless (false? b)
     (let* ([angl (/ 360 points-num)]
-            [radius (/ (posn-x (obj-size b)) 2)]
-            [center (posn-add-val (obj-position b) radius)]
+            [radius (/ (posn-x (entity-size b)) 2)]
+            [center (posn-add-val (entity-position b) radius)]
             [points (get-ball-points points-num angl radius center offset)]
             [res (get-points-cols points el)])
 
@@ -396,8 +547,8 @@
 (define (move-ball)
   (let ([b (get-element "ball")])
     (set-element (struct-copy ball b
-          [position #:parent obj 
-            (posn-add (obj-position b) 
+          [position #:parent entity 
+            (posn-add (entity-position b) 
             (ball-direction b))])
     ))
 )
@@ -412,15 +563,15 @@
 
 ;;  ---------- WALLS ----------
 
-; *walls is an initial List<Entity>
-(define *walls (obj-list "walls" (list 
-  (entity "wall0" (posn 0 0) (posn PIXEL HEIGHT)
+; *walls is an initial List<drawable>
+(define *walls (entity-list "walls" (list 
+  (drawable "wall0" (posn 0 0) (posn PIXEL HEIGHT)
     brush-wall "rect") 
-  (entity "wall1" (posn (- WIDTH PIXEL) 0) (posn PIXEL HEIGHT) 
+  (drawable "wall1" (posn (- WIDTH PIXEL) 0) (posn PIXEL HEIGHT) 
     brush-wall "rect")
-  (entity "wall2" (posn 0 0) (posn WIDTH PIXEL) 
+  (drawable "wall2" (posn 0 0) (posn WIDTH PIXEL) 
     brush-wall "rect")
-  ; (entity "wall3" (posn 0 (- HEIGHT PIXEL PIXEL)) (posn WIDTH PIXEL) 
+  ; (drawable "wall3" (posn 0 (- HEIGHT PIXEL PIXEL)) (posn WIDTH PIXEL) 
   ;   brush-wall "rect")
     )
 ))
@@ -430,13 +581,13 @@
 ;;  ---------- BLOCKS ----------
 
 ;; Data type
-;; block is a structure inherited from an entity (block id position size form hp)
+;; block is a structure inherited from an drawable (block id position size form hp)
 ;; where hp is a Number
 ;; interpretation: a prefab struct representing block
-(struct block entity (hp))
+(struct block drawable (hp))
 
 ; *blocks is an initial List<block>
-(define *blocks (obj-list "blocks" (list 
+(define *blocks (entity-list "blocks" (list 
   (block "block0" (posn 320 272) 
     (posn PIXEL PIXEL) brush-block1 "rect" 2) 
   (block "block1" (posn 304 288) 
@@ -444,11 +595,38 @@
   )
 ))
 
+; generate-block-posn : posn posn -> posn
+; generate random position in given borders
+; header: (define (generate-block-posn border-l border-r)
+
+;; Template:
+; (define (generate-block-posn border-l border-r)
+; (posn ... (random (posn-x ...) (posn-y ...)) ...))
+
+;; Code
 (define (generate-block-posn border-l border-r)
   (posn (* (random (posn-x border-l) (posn-x border-r)) PIXEL)
         (* (random (posn-y border-l) (posn-y border-r)) PIXEL)
 ))
 
+; use random (impossible to make tests)
+;(check-equal? (posn-x (generate-block-posn (posn 0 0) (posn 10 10))) (* 16 (random 0 10)))
+;(check-equal? (posn-y (generate-block-posn (posn 5 5) (posn 15 15))) (* 16 (random 5 15)))
+;(check-equal? (posn-x (generate-block-posn (posn 0 0) (posn 100 100))) (* 16 (random 0 100)))
+
+
+; generate-blocks-posns : List<empty> Number posn posn -> List<posn>
+; generate List<posn> with unique positions
+; header: (define (generate-blocks-posns acc n border-l border-r)
+
+;; Template:
+; (define (generate-blocks-posns acc n border-l border-r)
+; (if (n ...) ... ; base case
+;   (if (member ...)  ; recursive case
+;     (generate-blocks-posns ...)
+;     (generate-blocks-posns ...))) 
+
+;; Code
 (define (generate-blocks-posns acc n border-l border-r)
   (if (<= n 0) acc
     (let ([r-posn (generate-block-posn border-l border-r)])
@@ -460,15 +638,45 @@
   )
 )
 
+(check-equal? (length (generate-blocks-posns '() 5 (posn 0 0) (posn 10 10))) 5)
+(check-equal? (length (generate-blocks-posns '() 10 (posn 5 5) (posn 15 15))) 10)
+(check-equal? (length (generate-blocks-posns '() 3 (posn 0 0) (posn 100 100))) 3)
+
+
+; get-block-brush : Number -> brush%
+; return brush depend on block hp
+; header: (define (get-block-brush hp)
+
+;; Template:
+; (define (get-block-brush hp)
+; (cond 
+;   [(= hp ...) ...]
+;   [else ...]  ; error case
+
+;; Code
 (define (get-block-brush hp)
   (cond
     [(= hp 1) brush-block1]
     [(= hp 2) brush-block2]
     [(= hp 3) brush-block3]
-    [else default-brush]
+    [else brush-default]
   )
 )
 
+(check-equal? (get-block-brush 1) brush-block1)
+(check-equal? (get-block-brush 0) brush-default)
+
+; generate-blocks-list : List<posn> -> List<block>
+; generate list of blocks
+; header: (define (generate-blocks-list posn-lst)
+
+;; Template:
+; (define (generate-blocks-list posn-lst)
+; (if (empty? posn-lst) ... ; base case
+;   (cons ... (first posn-lst) ...  ; recursive case
+;      (generate-blocks-list (rest posn-lst))))) 
+
+;; Code
 (define (generate-blocks-list posn-lst)
   (if (empty? posn-lst) '()
     (cons (let ([hp (random 1 4)]) 
@@ -479,17 +687,40 @@
   )
 )
 
+; generate-blocks : Number -> entity-list
+; generate entity-list with list of n number of blocks
+; header: (define (generate-blocks n)
+
+;; Template:
+; (define (generate-blocks n)
+; (entity-list "blocks" ...
+;   (if (< n MAX-BLOCKS-NUMBER) n MAX-BLOCKS-NUMBER) ...)
+
+;; Code
 (define (generate-blocks n)
-  (obj-list "blocks" (generate-blocks-list 
+  (entity-list "blocks" (generate-blocks-list 
     (generate-blocks-posns '() 
       (if (< n MAX-BLOCKS-NUMBER) n MAX-BLOCKS-NUMBER)
      BLOCKS-BORDER-LU BLOCKS-BORDER-RD))
   )
 )
 
+(check-equal? (length (entity-list-lst (generate-blocks 5))) 5)
+(check-equal? (length (entity-list-lst (generate-blocks 100000)))
+   MAX-BLOCKS-NUMBER)
 
+; block-collide : entity-list block -> void
+; processing colliding with block
+; header: (define (block-collide lst blk)
+
+;; Template:
+; (define (block-collide lst blk)
+; (if (<= (block-hp blk) 1)
+;  (... blk ...)
+;  (... (- (block-hp blk) 1) ... blk ...)
+
+;; Code
 (define (block-collide lst blk)
-  ;(let ([lst (get-element "blocks")])
     (if (<= (block-hp blk) 1)
       (remove-sub-element (item-id blk) lst)
       (let ([new-hp (- (block-hp blk) 1)])
@@ -502,6 +733,14 @@
     )
 )
 
+; later
+; (check-equal? ( (block-collide 
+;   (entity-list "test-blocks" 
+;     (list (block "testblk1" (posn 0 0) (posn 0 0) "rect" brush-default 1)
+;     (block "testblk2" (posn 0 0) (posn 0 0) "rect" brush-default 1))
+;   ) 
+;   (block "testblk1" (posn 0 0) (posn 0 0) "rect" brush-default 1))) 1)
+
 ;;  ---------- BLOCKS END ----------
 
 ;;  ---------- ENEMIES ----------
@@ -511,8 +750,8 @@
 ;; where hp is a Number
 ;; interpretation: a prefab struct representing block
 
-; *enemies is an initial List<Entity>
-(define *enemies (obj-list "enemies" (list 
+; *enemies is an initial List<block>
+(define *enemies (entity-list "enemies" (list 
   (block "enemy0" (posn (- (/ WIDTH 2) (/ PIXEL 2)) (/ HEIGHT 16)) 
     (posn PIXEL PIXEL) brush-ball "round-rect" 1)
   (block "enemy1" (posn (- (* WIDTH 0.25) PIXEL) (/ HEIGHT 16)) 
@@ -522,9 +761,16 @@
   )
 ))
 
+; check-enemies : -> void
+; check win condition when true -> win game
+; header: (define (check-enemies)
+
+;; Template:
+; (define (check-enemies)
+; (when (... (get-element "enemies")) ...)
 (define (check-enemies)
   (when (<= (length 
-      (obj-list-lst (get-element "enemies"))) 0)
+      (entity-list-lst (get-element "enemies"))) 0)
     (send canvas win-game))
 )
 
@@ -535,8 +781,8 @@
 ; header: (define (draw-rectangle dc o)
 ; template: (define (draw-rectangle dc o) (send dc draw-rectangle ... o ...))
 (define (draw-rectangle dc o)
-    (let* ([pos (obj-position o)]
-            [sz (obj-size o)])
+    (let* ([pos (entity-position o)]
+            [sz (entity-size o)])
                 
       (send dc set-brush (colorful-brush o))
 
@@ -552,8 +798,8 @@
 ; header: (define (draw-rounded-rectangle dc o)
 ; template: (define (draw-rounded-rectangle dc o) (send dc draw-rounded-rectangle ... o ...))
 (define (draw-rounded-rectangle dc o)
-    (let* ([pos (obj-position o)]
-            [sz (obj-size o)])
+    (let* ([pos (entity-position o)]
+            [sz (entity-size o)])
                 
       (send dc set-brush (colorful-brush o))
 
@@ -571,8 +817,8 @@
 ; header: (define (draw-circle dc o)
 ; template: (define (draw-circle dc o) (send dc draw-ellipse ... o ...))
 (define (draw-circle dc o)
-    (let* ([pos (obj-position o)]
-            [sz (obj-size o)])
+    (let* ([pos (entity-position o)]
+            [sz (entity-size o)])
 
       (send dc set-brush (colorful-brush o))
                 
@@ -587,26 +833,40 @@
 ; draw-form : dc, el -> Void
 ; call the function depend on element form
 ; header: (define (draw-form dc el)
-; template: (define (draw-form dc el) (cond ... (entity-form el) ...))
+
+;; Template: 
+; (define (draw-form dc el) 
+;   [(eq? (drawable-form el) "rect") ... ]
+;   [(eq? (drawable-form el) "round-rect") ... ]
+;   [(eq? (drawable-form el) "circle") ... ]
+;   [else ...] ; error case
+
+;; Code
 (define (draw-form dc el)
   (cond
-    [(eq? (entity-form el) "rect")
+    [(eq? (drawable-form el) "rect")
         (draw-rectangle dc el)]
-    [(eq? (entity-form el) "round-rect")
+    [(eq? (drawable-form el) "round-rect")
         (draw-rounded-rectangle dc el)]
-    [(eq? (entity-form el) "circle")
+    [(eq? (drawable-form el) "circle")
         (draw-circle dc el)]
-    [else (displayln `(,(item-id el) ,(entity-form el)))]
+    [else (displayln `(,(item-id el) ,(drawable-form el)))]
 ))
 
 ; draw-element : dc, el -> Void
 ; call the function depend on element type
 ; header: (define (draw-element dc el)
-; template: (define (draw-element dc el) (cond ... (el ...) ...)
+
+;; Template: 
+; (define (draw-element dc el) 
+;   (cond [(entity-list? el) ... ]
+;         [else ...]))
+
+;; Code
 (define (draw-element dc el) 
   (cond
-      [(obj-list? el)
-        (for ([sub-el (in-list (obj-list-lst el))]) 
+      [(entity-list? el)
+        (for ([sub-el (in-list (entity-list-lst el))]) 
           (draw-form dc sub-el))
       ]
       [else (draw-form dc el)]
@@ -617,51 +877,51 @@
 ;;  ---------- TITLES END ----------
 
 ;; Data type
-;; button is a structure inherited from an obj (button id position size text)
-;; where text is a String
-;; interpretation: a prefab struct representing button in application
-(struct title obj (text font))
+;; title is a structure inherited from an entity (title id position text font)
+;; where text is a String, font is a font%
+;; interpretation: a prefab struct representing title in application
+(struct title entity (text font))
 
 (define menu-up-title 
   (title "menu-up-ttl" 
     (posn (/ WIDTH 2) (/ HEIGHT 5)) 
-    (posn 0 0) "Ping-Pong" menu-title-font))
+    (posn 0 0) "Ping-Pong" font-title))
 
 (define menu-down-title1 
   (title "menu-down-ttl" 
     (posn (/ WIDTH 2) (/ HEIGHT 1.4)) 
-    (posn 0 0) "B   E   K   R" menu-title-font))
+    (posn 0 0) "B   E   K   R" font-title))
 
 (define menu-down-title2
   (title "menu-down-ttl" 
     (posn (/ WIDTH 2) (/ HEIGHT 1.45)) 
-    (posn 0 0) "   R   A   E   " menu-title-font))
+    (posn 0 0) "   R   A   E   " font-title))
 
 (define pause-title 
   (title "pause-ttl" 
     (posn (/ WIDTH 2) (/ HEIGHT 5)) 
-    (posn 0 0) "Pause" menu-title-font))
+    (posn 0 0) "Pause" font-title))
 
 (define win-title 
   (title "win-ttl" 
     (posn (/ WIDTH 2) (/ HEIGHT 5)) 
-    (posn 0 0) "You Win!!!" menu-title-font))
+    (posn 0 0) "You Win!!!" font-title))
 
 (define lose-title 
   (title "lose-ttl" 
     (posn (/ WIDTH 2) (/ HEIGHT 5)) 
-    (posn 0 0) "You Lose :(" menu-title-font))
+    (posn 0 0) "You Lose :(" font-title))
 
 ; draw-title : dc, t -> Void
 ; draw title on canvas
 ; header: (define (draw-title dc t)
 ; template: (define (draw-title dc t) (send dc ... t ...))
 (define (draw-title dc t)
-  (let* ([pos (obj-position t)])
+  (let* ([pos (entity-position t)])
       
       (if (title-font t)
         (send dc set-font (title-font t))
-        (send dc set-font default-font)
+        (send dc set-font font-default)
       )
 
   (define-values (text-w text-h d a)
@@ -679,13 +939,13 @@
 ;;  ---------- STATES ----------
 
 ;; Data type
-;; element is an any game element
-;; - obj
-;; - button ...
+;; element is an any game element:
+;   entity, item, drawable ...
 
 ;; Data type
-;; state is a structure (state elements buttons)
-;; where elements, buttons, titles is a List<obj>
+;; state is a structure (state elements buttons titles)
+;; where elements is a List<element>,
+; buttons is a List<button>, titles is a List<title>
 ;; interpretation: a prefab struct representing world-state  
 (struct state (elements buttons titles))
 
@@ -705,11 +965,12 @@
 ;; interpretation: a prefab struct contain active world-state
 (struct state-box (active-state))
 
-; *current-state is an initial state 
+; *current-state is a current world-state 
 (define *current-state (state-box menu-state))
 
 ; set-state : dc, el -> Void
 ; set new current state
+; modify state *current-state
 ; header: (define (set-state state)
 ; template: (define (set-state state) (set! ... state ...)
 (define (set-state state)
@@ -718,58 +979,57 @@
 ; get-elements : -> List<Elements>
 ; get list of current elements
 ; header: (define (get-elements)
-; template: (define (get-elements) (...)
+; template: (define (get-elements) (state-elements ...)
 (define (get-elements)
   (state-elements (state-box-active-state *current-state)))
 
-; test
 (check-equal? (get-elements) '())
 
 ; set-elements : List<Elements> -> Void
-; set new current elements
+; set new elements to current state
 ; header: (define (set-elements elems)
-; template: (define (set-elements elems) (...)
+; template: (define (set-elements elems) (... (state elems ...))
 (define (set-elements elems)
   (set-state (state elems (get-buttons) (get-titles))))
 
 ; get-buttons : -> List<Buttons>
 ; get list of current buttons
 ; header: (define (get-buttons)
-; template: (define (get-buttons) (...)
+; template: (define (get-buttons) (state-buttons ...)
 (define (get-buttons)
   (state-buttons (state-box-active-state *current-state)))
 
-; test
-;(check-equal? (get-buttons) (list play-button exit-button))
+(check-equal? (get-buttons) (list play-button quit-button))
 
 ; set-buttons : List<Buttons> -> Void
-; set new current buttons
+; set new buttons to current state
 ; header: (define (set-buttons buttons)
-; template: (define (set-buttons buttons) (...)
+; template: (define (set-buttons buttons) (... (state ... buttons ...))
 (define (set-buttons buttons)
   (set-state (state (get-elements) buttons (get-titles))))
 
 ; get-titles : -> List<titles>
 ; get list of current titles
 ; header: (define (get-titles)
-; template: (define (get-titles) (...)
+; template: (define (get-titles) (state-titles ...)
 (define (get-titles)
   (state-titles (state-box-active-state *current-state)))
 
-; test
-;(check-equal? (get-titles) (list play-button exit-button))
+(check-equal? (get-titles) 
+  (list menu-up-title menu-down-title1 menu-down-title2))
 
 ; set-titles : List<titles> -> Void
-; set new current titles
+; set new titles to current state
 ; header: (define (set-titles titles)
-; template: (define (set-titles titles) (...)
+; template: (define (set-titles titles) (... (state ... titles))
 (define (set-titles titles)
   (set-state (state (get-elements) (get-buttons) titles)))
 
-; get-element : String -> obj
+; get-element : String -> entity
 ; get element by id
 ; header: (define (get-element id)
-; template: (define (get-element id) (findf (lambda (...) ... id ...) ...)
+; template: (define (get-element id) 
+;   (findf (lambda (...) ... id ...) ...)
 (define (get-button id) (findf 
   (lambda (el) (equal? (item-id el) id))
      (get-buttons)
@@ -788,7 +1048,7 @@
 )
 
 
-; get-element : String -> obj
+; get-element : String -> entity
 ; get element by id
 ; header: (define (get-element id)
 ; template: (define (get-element id) (findf (lambda (...) ... id ...) ...)
@@ -812,7 +1072,7 @@
   (set-elements (remove (get-element id) (get-elements)))
 )
 
-; set-element : obj -> Void
+; set-element : entity -> Void
 ; remove element by id
 ; header: (define (set-element id)
 ; template: (define (set-element id) (remove (...) ...)
@@ -821,27 +1081,27 @@
   (add-element el)
 )
 
-; get-sub-element : String, List<obj> -> obj
+; get-sub-element : String, List<entity> -> entity
 ; get element from lists by id and position
 ; header: (define (get-sub-element id el-lst)
 (define (get-sub-element id el-lst)(findf 
   (lambda (el) (equal? (item-id el) id))
-     (obj-list-lst el-lst))
+     (entity-list-lst el-lst))
 )
 
 (define (add-sub-element sub-el el-lst)
   (set-element 
-    (struct-copy obj-list el-lst
-      [lst (cons sub-el (obj-list-lst el-lst))]
+    (struct-copy entity-list el-lst
+      [lst (cons sub-el (entity-list-lst el-lst))]
     )
   )
 )
 
 (define (remove-sub-element id el-lst)
   (set-element 
-    (struct-copy obj-list el-lst
+    (struct-copy entity-list el-lst
       [lst (remove (get-sub-element id el-lst) 
-      (obj-list-lst el-lst))]
+      (entity-list-lst el-lst))]
     )
   )
 )
@@ -849,10 +1109,6 @@
 (define (set-sub-element sub-el el-lst)
   (remove-sub-element (item-id sub-el) el-lst)
   (add-sub-element sub-el (get-element "blocks"))
-)
-
-(define (test)
-  (displayln "test")
 )
 
 ;;  ---------- STATES END ----------
@@ -865,11 +1121,19 @@
                [border 0]))
 
 ; Custom canvas is a Class
-; Overridden canvas% class that contains the game logic
+; Overridden canvas% class
 (define custom-canvas%
   (class canvas%
     (inherit get-dc)
 
+    ; tick : -> void
+    ; game timer tick 
+    ; header: (define (tick)
+
+    ;; Template:
+    ; (define (tick) (...)
+
+    ;; Code
     (define (tick)
       (update-ball)
       (update-ball)
@@ -878,34 +1142,76 @@
       (paint-callback this 'y)
     )
 
+    ; *in-game is Boolean variable that indicate if the game active
     (define *in-game #f)
 
+    ; game-timer is a timer%
     (define game-timer
       (new timer%
            [notify-callback tick] [interval #f])
     )
 
+    ; init-game : -> void
+    ; initialize a gameboard
+    ; header: (define/public (init-game)
+
+    ;; Template:
+    ; (define/public (init-game) (...)
+
+    ;; Code
     (define/public (init-game)
       (set-state game-state)
       (set-element (generate-blocks 100))
       (play-game)
     )
 
+    ; play-game : -> void
+    ; start playing the game
+    ; header: (define/private (play-game)
+
+    ;; Template:
+    ; (define/private (play-game) (...)
+
+    ;; Code
     (define/private (play-game)
       (set! *in-game #t)
       (send game-timer start FRAME-RATE)
     )
+
+    ; stop-game : -> void
+    ; stop the game
+    ; header: (define/private (stop-game)
+
+    ;; Template:
+    ; (define/private (stop-game) (...)
+
+    ;; Code
     (define/private (stop-game)
       (set! *in-game #f)
       (send game-timer stop)
     )
   
+    ; quit-game : -> void
+    ; quit from the game
+    ; header: (define/public (quit-game)
 
+    ;; Template:
+    ; (define/public (quit-game) (...)
+
+    ;; Code
     (define/public (quit-game)
       (set-state menu-state)
       (stop-game)
     )
 
+    ; pause-game : -> void
+    ; pause the game (change game state to pause-state)
+    ; header: (define/public (pause-game)
+
+    ;; Template:
+    ; (define/public (pause-game) (...)
+
+    ;; Code
     (define/public (pause-game)
       (let ([elems (get-elements)])
         (set-state pause-state)
@@ -914,6 +1220,14 @@
       (stop-game)
     )
 
+    ; continue-game : -> void
+    ; continue the game (change game state to game-state)
+    ; header: (define/public (continue-game)
+
+    ;; Template:
+    ; (define/public (continue-game) (...)
+
+    ;; Code
     (define/public (continue-game)
       (let ([elems (get-elements)])
         (set-state game-state)
@@ -922,21 +1236,53 @@
       (play-game)
     )
 
+    ; win-game : -> void
+    ; change game state to win-state
+    ; header: (define/public (win-game)
+
+    ;; Template:
+    ; (define/public (win-game) (...)
+
+    ;; Code
     (define/public (win-game)
       (set-state win-state)
       (stop-game)
     )
+    
+    ; lose-game : -> void
+    ; change game state to lose-game
+    ; header: (define/public (lose-game)
 
+    ;; Template:
+    ; (define/public (lose-game) (...)
+
+    ;; Code
     (define/public (lose-game)
       (set-state lose-state)
       (stop-game)
     )
 
+    ; paint-call : -> void
+    ; invoke paint callback
+    ; header: (define/public (paint-call)
+
+    ;; Template:
+    ; (define/public (paint-call) (...)
+
+    ;; Code
     (define/public (paint-call)
       (paint-callback this 'y)
     )
 
+    ; on-char : key-event -> void
     ; Overridden on-char function for checking custom keystrokes on the keyboard 
+    ; header: (define/override (on-char key-event)
+
+    ;; Template:
+    ; (define/override (on-char key-event) 
+    ;   ( ... (send key-event get-key-code) ... )
+
+    ;; Code
     (define/override (on-char key-event)
         (define key (send key-event get-key-code))
         
@@ -947,76 +1293,76 @@
             [(or (equal? key 'left)
                 (equal? key #\a ))
                     (move-player (- PIXEL))
-                    ;(displayln "move-left")
             ]
             ; Right arrow or 'd' key moves the player right
             [(or (equal? key 'right)
                 (equal? key #\d ))
                     (move-player PIXEL)
-                    ;(displayln "move-right")
             ]
             [(equal? key 'escape)
                 (pause-game)
                 (paint-callback this 'y)
             ]
-            [(equal? key #\space )
-                  (test)
-            ]
-            [else (println key)]
+            [else (displayln key)]
         ))
-
     )
 
-    ; (define *x 0)
-    ; (define *y 0)
-    ; (define *on-board #f)
+    ; on-event : evt -> void
+    ; Overridden on-event function for checking custom keystrokes on the keyboard 
+    ; header: (define/override (on-event evt)
 
+    ;; Template:
+    ; (define/override (on-event evt) 
+    ;   ( ... (send evt get-key-type) ... )
+
+    ;; Code
     (define/override (on-event evt)
       (define type (send evt get-event-type))
-      ; (set! *x (send evt get-x))
-      ; (set! *y (send evt get-y))
-      ; (cond
-      ;   [(eq? 'leave type) (set! *on-board #f)]
-      ;   [(eq? 'enter type) (set! *on-board #t)]
-      ; )
 
-      ;(displayln `("m-pos:", *x, *y))
-
-      (for ([btn (in-list (get-buttons))])
-          (when (and (eq? 'left-down type) 
-            (check-hover (posn (send evt get-x) (send evt get-y)) btn)) 
-          (handle-button (item-id btn)))
+        (for ([btn (in-list (get-buttons))])
+            (when (and (eq? 'left-down type) 
+              (check-hover (posn (send evt get-x) (send evt get-y)) btn)) 
+            (handle-button (item-id btn)))
+        )
       )
 
-      ; Display of any changes
-      ;(paint-callback this 'y)
-      )
+    ; paint-callback
+    ; Overridden on-event function for draw all changes
+    ; header: (define (paint-callback _self _evt)
 
+    ;; Template:
+    ; (define (paint-callback _self _evt)
+    ;   ( ... (send evt get-key-type) ... )
+
+    ;; Code
     (define (paint-callback _self _evt)
       ; a dc object is a drawing context for drawing graphics and text
       (let ([dc (get-dc)])
         ; Clear old changes
         (send dc clear)
-
+        ; Set background
         (send dc set-background background-color)
+        ; Set smoothing
         (send dc set-smoothing 'smoothed)
 
-        ;; draw
-
+        ; Draw elements
         (for ([el (in-list (get-elements))])
             (draw-element dc el)
         )
 
+        ; Draw buttons
         (for ([btn (in-list (get-buttons))])
             (draw-button dc btn)
         )
 
+        ; Draw titles
         (for ([ttl (in-list (get-titles))])
             (draw-title dc ttl)
         )
       )
     )
 
+    ; invokes on create new canvas%
     (super-new [paint-callback paint-callback])
     ))
 
@@ -1027,3 +1373,5 @@
 
 ; Show the game
 (send f show #t)
+
+;(test)
